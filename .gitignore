@@ -2,9 +2,6 @@
 node_modules/
 client/node_modules/
 
-# Production build (built automatically by Render buildCommand)
-client/dist/
-
 # Logs & temp
 *.log
 npm-debug.log*

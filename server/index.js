@@ -976,9 +976,24 @@ app.delete('/api/announcements/:id', (req, res) => {
 // ----------------------
 const clientDist = path.join(__dirname, '../client/dist');
 if (fs.existsSync(clientDist)) {
+  console.log(`[Static] Serving frontend from ${clientDist}`);
   app.use(express.static(clientDist));
-  app.use((req, res) => {
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
+      return next();
+    }
     res.sendFile(path.join(clientDist, 'index.html'));
+  });
+} else {
+  console.warn(`[Static] Warning: clientDist not found at ${clientDist}`);
+  app.get('/', (req, res) => {
+    res.send(`
+      <div style="font-family: sans-serif; text-align: center; padding: 50px;">
+        <h2>Website Quản Lý Nhà Trọ An Cư</h2>
+        <p>Backend API đang chạy bình thường.</p>
+        <p style="color: #666;">client/dist chưa được build trong lúc deploy. Hãy cài Build Command: <code>npm run render-build</code> trong cài đặt Render.</p>
+      </div>
+    `);
   });
 }
 
