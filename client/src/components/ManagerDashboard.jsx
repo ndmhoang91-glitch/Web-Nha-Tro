@@ -1,0 +1,1392 @@
+import React, { useState } from 'react';
+import {
+  LayoutDashboard, FileText, ShieldCheck, Users, Receipt, Settings as SettingsIcon,
+  Plus, Sparkles, CheckCircle2, Clock, AlertTriangle, Zap, Droplet, Wifi,
+  Printer, Copy, Search, ArrowUpRight, ArrowDownRight, DollarSign, Eye,
+  Building, Phone, CreditCard, ChevronRight, Check, Bell, Trash2, Send,
+  Edit3, Pencil
+} from 'lucide-react';
+import { formatVND, generateBatchInvoices, updateSettings, deleteAnnouncement, deleteRoom } from '../api';
+import confetti from 'canvas-confetti';
+
+export default function ManagerDashboard({
+  rooms = [],
+  invoices = [],
+  tenants = [],
+  proofs = [],
+  expenses = [],
+  announcements = [],
+  statistics = {},
+  auditLogs = [],
+  settings = {},
+  currentMonth,
+  onRefresh,
+  onOpenInvoiceModal,
+  onOpenMeterModal,
+  onOpenProofModal,
+  onOpenTenantModal,
+  onOpenExpenseModal,
+  onOpenAnnouncementModal,
+  onOpenRoomModal
+}) {
+  const [activeTab, setActiveTab] = useState('overview'); // overview, invoices, proofs, tenants, cashflow, announcements, settings
+  const [batchGenerating, setBatchGenerating] = useState(false);
+  const [copiedZaloId, setCopiedZaloId] = useState(null);
+
+  // Settings form local state
+  const [settingsForm, setSettingsForm] = useState({ ...settings });
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  // Filter states
+  const [invoiceSearch, setInvoiceSearch] = useState('');
+  const [invoiceStatusFilter, setInvoiceStatusFilter] = useState('ALL');
+  const [proofStatusFilter, setProofStatusFilter] = useState('ALL');
+  const [announcementFilter, setAnnouncementFilter] = useState('ALL');
+  const [copiedAnnounceId, setCopiedAnnounceId] = useState(null);
+
+  const handleCopyAnnouncementZalo = (ann) => {
+    const text = `📢 THÔNG BÁO TỪ CHỦ NHÀ TRỌ
+------------------------------------
+📌 ${ann.title}
+⏰ Thời gian: ${ann.startTime || ''} ${ann.endTime ? `➔ ${ann.endTime}` : ''}
+👥 Phạm vi: ${ann.targetType === 'ALL' ? 'Toàn bộ 6 phòng trọ' : `Phòng ${ann.targetRoomName || ''}`}
+📝 Chi tiết dặn dò:
+${ann.content}
+------------------------------------
+Mọi người chú ý chuẩn bị nhé. Cảm ơn quý khách!`;
+
+    navigator.clipboard.writeText(text);
+    setCopiedAnnounceId(ann.id);
+    setTimeout(() => setCopiedAnnounceId(null), 2500);
+  };
+
+  const handleDeleteAnnounce = async (id, title) => {
+    if (!confirm(`Bạn có chắc chắn muốn xóa thông báo: "${title}"?`)) return;
+    try {
+      await deleteAnnouncement(id);
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      alert('Lỗi: ' + err.message);
+    }
+  };
+
+  // Trigger one-click automated invoice generation
+  const handleBatchGenerate = async () => {
+    if (!confirm(`Tự động tạo/đồng bộ hóa đơn cho tất cả các phòng trong tháng ${currentMonth}?\n(Hệ thống sẽ tự động lấy chỉ số điện nước mới tháng trước làm chỉ số cũ tháng này)`)) return;
+    setBatchGenerating(true);
+    try {
+      const res = await generateBatchInvoices(currentMonth);
+      confetti({ particleCount: 50, spread: 50, origin: { y: 0.7 } });
+      alert(`Đã hoàn tất tự động: ${res.createdCount} phòng tạo mới, ${res.updatedCount} phòng đã đồng bộ chỉ số cũ!`);
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      alert('Lỗi: ' + err.message);
+    } finally {
+      setBatchGenerating(false);
+    }
+  };
+
+  const handleCopyZaloSingle = (inv) => {
+    const text = `🏠 THÔNG BÁO TIỀN PHÒNG THÁNG ${inv.month?.slice(5)}/${inv.month?.slice(0, 4)} - ${inv.roomName}
+👤 Khách thuê: ${inv.tenantName || 'Anh/Chị'}
+- Tiền phòng: ${formatVND(inv.roomPrice)}
+- Điện (${inv.oldElectricity} ➔ ${inv.newElectricity} = ${inv.electricityUsage} kWh x ${formatVND(inv.electricityPrice)}): ${formatVND(inv.electricityCost)}
+- Nước (${inv.oldWater} ➔ ${inv.newWater} = ${inv.waterUsage} m³ x ${formatVND(inv.waterPrice)}): ${formatVND(inv.waterCost)}
+- Wifi: ${formatVND(inv.wifiFee)}
+👉 TỔNG TIỀN PHẢI NỘP: ${formatVND(inv.totalAmount)}
+STK: ${settings.bankAccount} (${settings.bankName}) - ${settings.bankOwner}
+Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.replace('-', '')}`;
+
+    navigator.clipboard.writeText(text);
+    setCopiedZaloId(inv.id);
+    setTimeout(() => setCopiedZaloId(null), 2500);
+  };
+
+  const handleSaveSettings = async (e) => {
+    e.preventDefault();
+    setSavingSettings(true);
+    try {
+      await updateSettings(settingsForm);
+      alert('Đã cập nhật thông tin cài đặt nhà trọ thành công!');
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      alert('Lỗi: ' + err.message);
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  // Filtered lists
+  const filteredInvoices = invoices.filter(inv => {
+    const matchSearch = inv.roomName?.toLowerCase().includes(invoiceSearch.toLowerCase()) ||
+                        inv.tenantName?.toLowerCase().includes(invoiceSearch.toLowerCase()) ||
+                        inv.invoiceCode?.toLowerCase().includes(invoiceSearch.toLowerCase());
+    const matchStatus = invoiceStatusFilter === 'ALL' || inv.status === invoiceStatusFilter;
+    return matchSearch && matchStatus;
+  });
+
+  const pendingProofs = proofs.filter(p => p.status === 'PENDING');
+  const filteredProofs = proofs.filter(p => {
+    if (proofStatusFilter === 'ALL') return true;
+    return p.status === proofStatusFilter;
+  });
+
+  return (
+    <div className="space-y-6">
+      
+      {/* Tab Navigation Pill Bar */}
+      <div className="flex items-center justify-between overflow-x-auto pb-1 gap-2 border-b border-slate-200">
+        <div className="flex items-center gap-1.5 shrink-0">
+          {[
+            { id: 'overview', label: 'Tổng Quan & 6 Phòng', icon: LayoutDashboard },
+            { id: 'invoices', label: 'Hóa Đơn & Ghi Điện Nước', icon: FileText, badge: invoices.length },
+            { id: 'proofs', label: 'Chứng Từ Đối Soát', icon: ShieldCheck, badge: pendingProofs.length, badgeColor: 'bg-amber-500' },
+            { id: 'announcements', label: 'Thông Báo Cúp Điện/Nước', icon: Bell, badge: announcements.length, badgeColor: 'bg-amber-500' },
+            { id: 'tenants', label: 'Khách Trọ & CCCD', icon: Users, badge: tenants.length },
+            { id: 'cashflow', label: 'Thu - Chi & Lợi Nhuận', icon: Receipt },
+            { id: 'settings', label: 'Cấu Hình & Giá Dịch Vụ', icon: SettingsIcon },
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap cursor-pointer ${
+                  isActive
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                <span>{tab.label}</span>
+                {tab.badge !== undefined && tab.badge > 0 && (
+                  <span className={`px-1.5 py-0.2 rounded-full text-[11px] font-bold ${
+                    isActive ? 'bg-white/20 text-white' : (tab.badgeColor ? `${tab.badgeColor} text-white` : 'bg-slate-200 text-slate-700')
+                  }`}>
+                    {tab.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Global Action: Batch auto calculate */}
+        <div className="shrink-0 pl-2">
+          <button
+            type="button"
+            disabled={batchGenerating}
+            onClick={handleBatchGenerate}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-linear-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-sm transition-all"
+            title="Tự động sao chép số cũ tháng trước, áp giá phòng và tạo hóa đơn cho 6 phòng"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>{batchGenerating ? 'Đang tính...' : 'Tự Động Tính Tiền Tháng Này'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ======================================================== */}
+      {/* TAB 1: OVERVIEW & 6 ROOMS GRID */}
+      {/* ======================================================== */}
+      {activeTab === 'overview' && (
+        <div className="space-y-6">
+          
+          {/* Key Metric KPI Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            
+            {/* Total Revenue Collected */}
+            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs">
+              <div className="flex items-center justify-between text-slate-500 mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider">Đã Thu Tiền Trọ</span>
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <ArrowUpRight className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="text-lg sm:text-2xl font-black text-slate-900">
+                {formatVND(statistics.totalCollected)}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
+                <span>Tổng phải thu:</span>
+                <strong className="text-slate-800">{formatVND(statistics.totalBilled)}</strong>
+              </div>
+            </div>
+
+            {/* Total Expenses */}
+            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs">
+              <div className="flex items-center justify-between text-slate-500 mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider">Tổng Chi Phí Nhà</span>
+                <div className="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
+                  <ArrowDownRight className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="text-lg sm:text-2xl font-black text-rose-600">
+                {formatVND(statistics.totalExpense)}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1">
+                Điện nước tổng, bảo trì, rác, wifi
+              </div>
+            </div>
+
+            {/* Net Profit */}
+            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs">
+              <div className="flex items-center justify-between text-slate-500 mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider">Lợi Nhuận Ròng</span>
+                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <DollarSign className="w-4 h-4" />
+                </div>
+              </div>
+              <div className={`text-lg sm:text-2xl font-black ${statistics.netProfit >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>
+                {formatVND(statistics.netProfit)}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1">
+                Đã thu trừ toàn bộ chi phí
+              </div>
+            </div>
+
+            {/* Uncollected / Outstanding */}
+            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs">
+              <div className="flex items-center justify-between text-slate-500 mb-2">
+                <span className="text-xs font-bold uppercase tracking-wider">Còn Nợ Chưa Thu</span>
+                <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+                  <Clock className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="text-lg sm:text-2xl font-black text-amber-600">
+                {formatVND(statistics.totalUncollected)}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
+                <span>Tỷ lệ lấp đầy:</span>
+                <strong className="text-emerald-700">{statistics.occupiedRooms}/{statistics.totalRooms} phòng ({statistics.occupancyRate}%)</strong>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Active Outage/Announcements Banner on Overview */}
+          {announcements.length > 0 && (
+            <div className="bg-amber-50/90 border border-amber-300 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-white ${
+                  announcements[0].type === 'OUTAGE_ELECTRIC' ? 'bg-amber-500' : announcements[0].type === 'OUTAGE_WATER' ? 'bg-cyan-600' : 'bg-rose-600'
+                }`}>
+                  {announcements[0].type === 'OUTAGE_ELECTRIC' ? <Zap className="w-5 h-5" /> : announcements[0].type === 'OUTAGE_WATER' ? <Droplet className="w-5 h-5" /> : <Bell className="w-5 h-5" />}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-900 text-sm">{announcements[0].title}</span>
+                    <span className="bg-amber-100 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                      Đang thông báo cho khách
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 line-clamp-1 mt-0.5">
+                    Thời gian: <strong className="font-mono text-slate-800">{announcements[0].startTime} {announcements[0].endTime ? `➔ ${announcements[0].endTime}` : ''}</strong> • {announcements[0].content}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('announcements')}
+                  className="px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white transition-colors"
+                >
+                  Xem Bảng Tin ({announcements.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenAnnouncementModal}
+                  className="px-3 py-2 rounded-xl text-xs font-bold bg-white border border-amber-300 text-amber-900 hover:bg-amber-50 transition-colors"
+                >
+                  + Phát Thông Báo
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Pending Proofs Alert Notice if any */}
+          {pendingProofs.length > 0 && (
+            <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 flex items-center justify-between shadow-2xs">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-400 text-amber-950 flex items-center justify-center shrink-0">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-amber-950 text-sm">
+                    Có {pendingProofs.length} chứng từ thanh toán cần đối soát!
+                  </h4>
+                  <p className="text-xs text-amber-800">
+                    Khách thuê đã chuyển khoản và gửi ảnh biên lai ngân hàng để xác nhận thanh toán.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('proofs')}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white shrink-0 shadow-xs transition-colors"
+              >
+                Kiểm Tra Đối Soát Ngay
+              </button>
+            </div>
+          )}
+
+          {/* 6 Rooms Visual Grid */}
+          <div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <div>
+                <h3 className="font-bold text-slate-900 text-base sm:text-lg">
+                  Tình Trạng Các Phòng Trọ ({rooms.length} Phòng - Kỳ Thu: Tháng {currentMonth?.slice(5)}/{currentMonth?.slice(0, 4)})
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Theo dõi số điện nước, hóa đơn, sửa/xóa thông tin phòng và trạng thái thanh toán
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => onOpenRoomModal(null)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 shadow-2xs cursor-pointer"
+                  title="Thêm phòng trọ mới vào hệ thống"
+                >
+                  <Plus className="w-3.5 h-3.5 text-blue-600" /> Thêm Phòng Mới
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onOpenTenantModal(null)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Thêm Khách Mới
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {rooms.map(room => {
+                // Find invoice for this room
+                const inv = invoices.find(i => i.roomId === room.id);
+                const isOccupied = room.status === 'OCCUPIED';
+
+                return (
+                  <div
+                    key={room.id}
+                    className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between"
+                  >
+                    <div>
+                      {/* Top Header of Card */}
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-black text-slate-900 text-lg">
+                            {room.name}
+                          </span>
+                          <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                            Tầng {room.floor}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => onOpenRoomModal(room)}
+                            className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                            title="Sửa thông tin / Đổi giá / Xóa phòng này"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        {/* Status Badge */}
+                        {isOccupied ? (
+                          inv ? (
+                            <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
+                              inv.status === 'PAID'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : inv.status === 'PENDING_APPROVAL'
+                                ? 'bg-amber-100 text-amber-900 animate-pulse'
+                                : 'bg-rose-100 text-rose-800'
+                            }`}>
+                              {inv.status === 'PAID' ? '✓ Đã thanh toán' : inv.status === 'PENDING_APPROVAL' ? '⏳ Chờ duyệt bill' : '⚠️ Chưa đóng tiền'}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                              Chưa có HĐ
+                            </span>
+                          )
+                        ) : (
+                          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                            Phòng trống
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Tenant & Room Details */}
+                      {isOccupied ? (
+                        <div className="space-y-2 mb-4 text-xs">
+                          <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                            <div>
+                              <div className="font-bold text-slate-800 text-sm">
+                                {room.representativeName || 'Chưa có thông tin'}
+                              </div>
+                              <div className="text-slate-500 text-[11px] flex items-center gap-1 mt-0.5">
+                                <Phone className="w-3 h-3 text-slate-400" />
+                                <span>{room.representativePhone || '---'}</span>
+                              </div>
+                            </div>
+                            <span className="text-[11px] text-blue-700 bg-blue-50 px-2 py-1 rounded-lg font-semibold">
+                              {room.tenantCount} người ở
+                            </span>
+                          </div>
+
+                          {/* Utilities breakdown snippet */}
+                          {inv ? (
+                            <div className="grid grid-cols-2 gap-2 text-[11px] bg-slate-50/70 p-2.5 rounded-xl border border-slate-100">
+                              <div className="flex items-center gap-1.5 text-amber-800">
+                                <Zap className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                <span>Điện: <strong>{inv.electricityUsage} kWh</strong></span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-cyan-800">
+                                <Droplet className="w-3.5 h-3.5 text-cyan-600 shrink-0" />
+                                <span>Nước: <strong>{inv.waterUsage} m³</strong></span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-center py-2 text-slate-400 text-xs italic">
+                              Chưa tạo hóa đơn tháng này
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="bg-slate-50 rounded-xl p-4 text-center my-4 space-y-2">
+                          <div className="text-xs text-slate-600">
+                            Giá thuê: <strong className="text-slate-900 font-bold">{formatVND(room.basePrice)}</strong>/tháng
+                            {room.area > 0 && <span> • Diện tích: <strong>{room.area}m²</strong></span>}
+                          </div>
+                          {room.description && (
+                            <p className="text-[11px] text-slate-500 italic line-clamp-2">{room.description}</p>
+                          )}
+                          <div className="flex items-center justify-center gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => onOpenTenantModal({ roomId: room.id })}
+                              className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 shadow-2xs"
+                            >
+                              Xếp Khách Vào Phòng
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onOpenRoomModal(room)}
+                              className="px-2.5 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-100 shadow-2xs flex items-center gap-1"
+                              title="Sửa thông tin hoặc xóa phòng này"
+                            >
+                              <Pencil className="w-3 h-3 text-blue-600" /> Sửa / Xóa
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Total Amount & Due */}
+                      {inv && (
+                        <div className="flex items-center justify-between pt-2 border-t border-slate-100 mb-4">
+                          <span className="text-xs text-slate-500">Tổng tiền tháng này:</span>
+                          <span className="text-base font-black text-slate-900">
+                            {formatVND(inv.totalAmount)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action Buttons for Room */}
+                    {isOccupied && inv && (
+                      <div className="grid grid-cols-4 gap-1 pt-2 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => onOpenMeterModal(inv)}
+                          className="flex items-center justify-center gap-1 px-1.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-semibold transition-colors"
+                          title="Ghi chỉ số điện nước"
+                        >
+                          <Zap className="w-3 h-3 text-amber-600" /> Điện
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => onOpenInvoiceModal(inv)}
+                          className="flex items-center justify-center gap-1 px-1.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-[11px] font-semibold transition-colors"
+                          title="Xem chi tiết hóa đơn & in"
+                        >
+                          <Eye className="w-3 h-3" /> HĐ
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleCopyZaloSingle(inv)}
+                          className={`flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
+                            copiedZaloId === inv.id
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                          }`}
+                          title="Sao chép nội dung gửi qua Zalo"
+                        >
+                          {copiedZaloId === inv.id ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3 text-blue-600" />}
+                          {copiedZaloId === inv.id ? 'Đã chép' : 'Zalo'}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => onOpenRoomModal(room)}
+                          className="flex items-center justify-center gap-1 px-1.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-blue-600 rounded-lg text-[11px] font-semibold transition-colors"
+                          title="Sửa thông tin hoặc xóa phòng này"
+                        >
+                          <Pencil className="w-3 h-3" /> Sửa
+                        </button>
+                      </div>
+                    )}
+
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Audit Logs Stream (Lịch sử hoạt động đối soát gần đây) */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-blue-600" />
+                Nhật Ký Đối Soát & Giao Dịch Nhà Trọ Gần Đây
+              </h4>
+              <span className="text-xs text-slate-400">Minh bạch - Tránh rắc rối</span>
+            </div>
+
+            <div className="space-y-2 max-h-56 overflow-y-auto">
+              {auditLogs.slice(0, 8).map(log => (
+                <div key={log.id} className="text-xs flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0"></span>
+                    <span className="font-bold text-slate-800 shrink-0">{log.action}:</span>
+                    <span className="text-slate-600 truncate">{log.detail}</span>
+                  </div>
+                  <div className="text-[11px] text-slate-400 shrink-0 ml-2 font-mono">
+                    {log.timestamp}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB 2: INVOICES & BILLING */}
+      {/* ======================================================== */}
+      {activeTab === 'invoices' && (
+        <div className="space-y-4">
+          
+          {/* Controls & Filter */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-64">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Tìm phòng, tên khách, mã HĐ..."
+                  value={invoiceSearch}
+                  onChange={e => setInvoiceSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden focus:border-blue-500"
+                />
+              </div>
+
+              <select
+                value={invoiceStatusFilter}
+                onChange={e => setInvoiceStatusFilter(e.target.value)}
+                className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-700 outline-hidden"
+              >
+                <option value="ALL">Tất cả trạng thái</option>
+                <option value="UNPAID">Chưa thanh toán</option>
+                <option value="PENDING_APPROVAL">Chờ duyệt đối soát</option>
+                <option value="PAID">Đã thanh toán</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <button
+                type="button"
+                onClick={handleBatchGenerate}
+                disabled={batchGenerating}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Tự Động Tính Tiền 6 Phòng
+              </button>
+            </div>
+          </div>
+
+          {/* Table of Invoices */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-100/90 text-slate-700 font-bold border-b border-slate-200">
+                    <th className="p-3">Mã HĐ & Phòng</th>
+                    <th className="p-3">Khách Thuê</th>
+                    <th className="p-3 text-center">Điện (Số cũ ➔ mới)</th>
+                    <th className="p-3 text-center">Nước (Số cũ ➔ mới)</th>
+                    <th className="p-3 text-right">Phí Khác</th>
+                    <th className="p-3 text-right">Tổng Tiền</th>
+                    <th className="p-3 text-center">Trạng Thái</th>
+                    <th className="p-3 text-center">Thao Tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 text-slate-700">
+                  {filteredInvoices.map(inv => (
+                    <tr key={inv.id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="p-3">
+                        <div className="font-bold text-slate-900 text-sm">{inv.roomName}</div>
+                        <span className="font-mono text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-sm">
+                          {inv.invoiceCode}
+                        </span>
+                      </td>
+
+                      <td className="p-3">
+                        <div className="font-semibold text-slate-800">{inv.tenantName || '---'}</div>
+                        <div className="text-[11px] text-slate-500">{inv.tenantPhone || '---'}</div>
+                      </td>
+
+                      <td className="p-3 text-center">
+                        <div className="font-mono text-slate-700">{inv.oldElectricity} ➔ {inv.newElectricity}</div>
+                        <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded-sm">
+                          {inv.electricityUsage} kWh ({formatVND(inv.electricityCost)})
+                        </span>
+                      </td>
+
+                      <td className="p-3 text-center">
+                        <div className="font-mono text-slate-700">{inv.oldWater} ➔ {inv.newWater}</div>
+                        <span className="text-[11px] font-bold text-cyan-700 bg-cyan-50 px-1.5 py-0.2 rounded-sm">
+                          {inv.waterUsage} m³ ({formatVND(inv.waterCost)})
+                        </span>
+                      </td>
+
+                      <td className="p-3 text-right">
+                        <div className="font-medium text-slate-800">{formatVND(inv.wifiFee + (inv.totalExtraFee || 0))}</div>
+                        <div className="text-[10px] text-slate-400">Wifi + rác + phụ thu</div>
+                      </td>
+
+                      <td className="p-3 text-right">
+                        <div className="font-black text-slate-900 text-sm">{formatVND(inv.totalAmount)}</div>
+                        {inv.paidAmount > 0 && inv.remainingAmount > 0 && (
+                          <div className="text-[10px] text-rose-600 font-bold">Nợ lại: {formatVND(inv.remainingAmount)}</div>
+                        )}
+                      </td>
+
+                      <td className="p-3 text-center">
+                        <span className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-bold ${
+                          inv.status === 'PAID'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : inv.status === 'PENDING_APPROVAL'
+                            ? 'bg-amber-100 text-amber-900 animate-pulse'
+                            : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          {inv.status === 'PAID' ? '✓ Đã thanh toán' : inv.status === 'PENDING_APPROVAL' ? '⏳ Chờ duyệt đối soát' : '⚠️ Chưa đóng'}
+                        </span>
+                      </td>
+
+                      <td className="p-3 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => onOpenMeterModal(inv)}
+                            className="p-1.5 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100"
+                            title="Ghi chỉ số điện nước"
+                          >
+                            <Zap className="w-3.5 h-3.5" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => onOpenInvoiceModal(inv)}
+                            className="p-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100"
+                            title="Xem & in hóa đơn"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleCopyZaloSingle(inv)}
+                            className={`p-1.5 rounded-lg transition-colors ${
+                              copiedZaloId === inv.id ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                            }`}
+                            title="Sao chép nội dung gửi Zalo"
+                          >
+                            {copiedZaloId === inv.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+
+                  {filteredInvoices.length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="p-8 text-center text-slate-400">
+                        Không tìm thấy hóa đơn nào trong tháng này.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB 3: PROOFS & AUDIT TRAIL (CHỨNG TỪ ĐỐI SOÁT) */}
+      {/* ======================================================== */}
+      {activeTab === 'proofs' && (
+        <div className="space-y-4">
+          
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-slate-900 text-base">
+                Lưu Trữ & Đối Soát Chứng Từ Thanh Toán
+              </h3>
+              <p className="text-xs text-slate-500">
+                Toàn bộ ảnh biên lai ngân hàng, ủy nhiệm chi được lưu lại vĩnh viễn để đối chiếu không bao giờ tranh chấp
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <select
+                value={proofStatusFilter}
+                onChange={e => setProofStatusFilter(e.target.value)}
+                className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-700"
+              >
+                <option value="ALL">Tất cả chứng từ</option>
+                <option value="PENDING">Đang chờ duyệt ({pendingProofs.length})</option>
+                <option value="APPROVED">Đã đối soát xong</option>
+                <option value="REJECTED">Bị từ chối</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Proofs Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredProofs.map(proof => (
+              <div
+                key={proof.id}
+                className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs flex flex-col justify-between hover:border-blue-300 transition-all"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-black text-slate-900 text-base">{proof.roomName}</span>
+                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                      proof.status === 'APPROVED'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : proof.status === 'PENDING'
+                        ? 'bg-amber-100 text-amber-900 animate-pulse'
+                        : 'bg-rose-100 text-rose-800'
+                    }`}>
+                      {proof.status === 'APPROVED' ? '✓ Đã duyệt khớp' : proof.status === 'PENDING' ? '⏳ Chờ duyệt' : '❌ Từ chối'}
+                    </span>
+                  </div>
+
+                  {/* Thumbnail */}
+                  <div
+                    onClick={() => onOpenProofModal(proof)}
+                    className="h-44 bg-slate-100 rounded-xl border border-slate-200 overflow-hidden flex items-center justify-center cursor-pointer relative group mb-3"
+                  >
+                    {proof.proofImageUrl ? (
+                      <img
+                        src={proof.proofImageUrl}
+                        alt="Biên lai"
+                        className="w-full h-full object-contain group-hover:scale-105 transition-transform"
+                      />
+                    ) : (
+                      <span className="text-xs text-slate-400">Nộp tiền mặt trực tiếp</span>
+                    )}
+                    <div className="absolute inset-0 bg-slate-900/30 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-bold transition-opacity">
+                      Nhấn để phóng to & duyệt
+                    </div>
+                  </div>
+
+                  {/* Details */}
+                  <div className="space-y-1 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">Số tiền:</span>
+                      <strong className="text-sm font-black text-slate-900">{formatVND(proof.amount)}</strong>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">Khách nộp:</span>
+                      <strong className="text-slate-800">{proof.tenantName || 'Khách thuê'}</strong>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">Thời gian:</span>
+                      <span className="font-mono text-slate-600 text-[11px]">{proof.paymentDate}</span>
+                    </div>
+                    {proof.transactionCode && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">Mã GD:</span>
+                        <span className="font-mono text-blue-700 text-[11px] font-bold">{proof.transactionCode}</span>
+                      </div>
+                    )}
+                    {proof.reviewNotes && (
+                      <div className="text-[11px] bg-slate-50 p-2 rounded-lg text-slate-600 mt-2">
+                        Ghi chú: {proof.reviewNotes}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Button */}
+                <div className="pt-3 mt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => onOpenProofModal(proof)}
+                    className={`w-full py-2 rounded-xl text-xs font-bold transition-colors ${
+                      proof.status === 'PENDING'
+                        ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-xs'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    {proof.status === 'PENDING' ? 'Kiểm Tra & Duyệt Đối Soát' : 'Xem Chi Tiết Chứng Từ'}
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {filteredProofs.length === 0 && (
+              <div className="col-span-3 text-center py-12 bg-white rounded-2xl border border-slate-200 text-slate-400">
+                Chưa có chứng từ nào trong danh mục này.
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB: ANNOUNCEMENTS (BẢNG TIN & THÔNG BÁO CÚP ĐIỆN, NƯỚC) */}
+      {/* ======================================================== */}
+      {activeTab === 'announcements' && (
+        <div className="space-y-4">
+          
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                <Bell className="w-5 h-5 text-amber-600" />
+                Bảng Tin & Thông Báo Cho Khách Thuê (Cúp Điện, Nước, Tin Khẩn)
+              </h3>
+              <p className="text-xs text-slate-500">
+                Thông báo hiển thị ngay trên đầu cổng thông tin của người thuê và hỗ trợ sao chép gửi Zalo phát loa
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <select
+                value={announcementFilter}
+                onChange={e => setAnnouncementFilter(e.target.value)}
+                className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-700 outline-hidden"
+              >
+                <option value="ALL">Tất cả thông báo</option>
+                <option value="OUTAGE_ELECTRIC">⚡ Cúp Điện</option>
+                <option value="OUTAGE_WATER">💧 Cúp Nước</option>
+                <option value="URGENT">🚨 Khẩn Cấp</option>
+                <option value="GENERAL">📢 Nhắc Nhở Chung</option>
+              </select>
+
+              <button
+                type="button"
+                onClick={onOpenAnnouncementModal}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-xs transition-colors shrink-0"
+              >
+                <Plus className="w-4 h-4" /> Phát Thông Báo Mới
+              </button>
+            </div>
+          </div>
+
+          {/* List of Announcements */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {announcements
+              .filter(a => announcementFilter === 'ALL' || a.type === announcementFilter)
+              .map(ann => {
+                const isElectric = ann.type === 'OUTAGE_ELECTRIC';
+                const isWater = ann.type === 'OUTAGE_WATER';
+                const isUrgent = ann.type === 'URGENT';
+
+                return (
+                  <div
+                    key={ann.id}
+                    className={`rounded-2xl border p-5 shadow-2xs flex flex-col justify-between transition-all ${
+                      isElectric
+                        ? 'bg-amber-50/50 border-amber-200'
+                        : isWater
+                        ? 'bg-cyan-50/50 border-cyan-200'
+                        : isUrgent
+                        ? 'bg-rose-50/50 border-rose-200'
+                        : 'bg-white border-slate-200'
+                    }`}
+                  >
+                    <div>
+                      {/* Top Badges */}
+                      <div className="flex items-center justify-between mb-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
+                            isElectric
+                              ? 'bg-amber-200 text-amber-900'
+                              : isWater
+                              ? 'bg-cyan-200 text-cyan-900'
+                              : isUrgent
+                              ? 'bg-rose-200 text-rose-900'
+                              : 'bg-blue-100 text-blue-900'
+                          }`}>
+                            {isElectric ? <Zap className="w-3 h-3 text-amber-700" /> : isWater ? <Droplet className="w-3 h-3 text-cyan-700" /> : isUrgent ? <AlertTriangle className="w-3 h-3 text-rose-700" /> : <Bell className="w-3 h-3 text-blue-700" />}
+                            {isElectric ? 'Cúp Điện' : isWater ? 'Cúp Nước' : isUrgent ? 'Khẩn Cấp' : 'Thông Báo Chung'}
+                          </span>
+
+                          <span className="text-[10px] font-semibold text-slate-600 bg-white/80 px-2 py-0.5 rounded-md border border-slate-200">
+                            {ann.targetType === 'ALL' ? '📢 Tất cả 6 phòng' : `👤 Riêng ${ann.targetRoomName || 'Phòng'}`}
+                          </span>
+                        </div>
+
+                        {ann.isPinned === 1 && (
+                          <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md">
+                            📌 Đang ghim
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Title */}
+                      <h4 className="font-bold text-slate-900 text-base mb-1.5">
+                        {ann.title}
+                      </h4>
+
+                      {/* Timeframe Banner */}
+                      {(ann.startTime || ann.endTime) && (
+                        <div className="bg-white/90 p-2.5 rounded-xl border border-slate-200/80 mb-3 text-xs flex items-center gap-2">
+                          <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                          <span className="text-slate-500">Thời gian:</span>
+                          <strong className="font-mono text-slate-800">
+                            {ann.startTime} {ann.endTime ? `➔ ${ann.endTime}` : ''}
+                          </strong>
+                        </div>
+                      )}
+
+                      {/* Content */}
+                      <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line mb-3">
+                        {ann.content}
+                      </p>
+                    </div>
+
+                    {/* Footer Actions */}
+                    <div className="pt-3 border-t border-slate-200/60 flex items-center justify-between text-xs">
+                      <span className="text-[11px] text-slate-400">
+                        {ann.createdAt} • Bởi {ann.createdBy || 'Chủ Trọ'}
+                      </span>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleCopyAnnouncementZalo(ann)}
+                          className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
+                            copiedAnnounceId === ann.id
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                          }`}
+                        >
+                          {copiedAnnounceId === ann.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5 text-blue-600" />}
+                          {copiedAnnounceId === ann.id ? 'Đã chép!' : 'Chép gửi Zalo'}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteAnnounce(ann.id, ann.title)}
+                          className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 transition-colors"
+                          title="Xóa thông báo này"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+            {announcements.filter(a => announcementFilter === 'ALL' || a.type === announcementFilter).length === 0 && (
+              <div className="col-span-2 text-center py-12 bg-white rounded-2xl border border-slate-200 text-slate-400 text-xs">
+                Chưa có thông báo nào trong mục này. Bấm <strong>"Phát Thông Báo Mới"</strong> để gửi thông tin cúp điện, cúp nước cho người thuê trọ.
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB 4: TENANTS & CCCD ARCHIVE */}
+      {/* ======================================================== */}
+      {activeTab === 'tenants' && (
+        <div className="space-y-4">
+          
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-slate-900 text-base">
+                Quản Lý Hồ Sơ Khách Trọ & Lưu Trữ CCCD 2 Mặt
+              </h3>
+              <p className="text-xs text-slate-500">
+                Lưu trữ hợp đồng, số CCCD, hình ảnh căn cước công dân và tiền đặt cọc để đối soát
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onOpenTenantModal(null)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors"
+            >
+              <Plus className="w-4 h-4" /> Thêm Khách Mới
+            </button>
+          </div>
+
+          {/* Tenants Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {tenants.map(tenant => (
+              <div
+                key={tenant.id}
+                className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs flex flex-col justify-between hover:border-blue-300 transition-all"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="font-black text-slate-900 text-base">{tenant.roomName}</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      tenant.isRepresentative ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-700'
+                    }`}>
+                      {tenant.isRepresentative ? 'Người đại diện' : 'Ở cùng'}
+                    </span>
+                  </div>
+
+                  {/* Personal info */}
+                  <div className="space-y-1.5 text-xs mb-4">
+                    <div className="font-bold text-slate-900 text-sm">{tenant.fullName}</div>
+                    <div className="text-slate-600 flex items-center gap-1.5">
+                      <Phone className="w-3.5 h-3.5 text-slate-400" />
+                      <strong className="font-mono">{tenant.phone}</strong>
+                      <span className="text-[10px] text-slate-400">(MK: {tenant.password || '123'})</span>
+                    </div>
+                    <div className="text-slate-600 flex items-center gap-1.5">
+                      <CreditCard className="w-3.5 h-3.5 text-slate-400" />
+                      <span>CCCD: <strong className="font-mono text-slate-800">{tenant.idCardNumber || 'Chưa có'}</strong></span>
+                    </div>
+                    <div className="text-slate-600">
+                      Quê quán: <span className="font-semibold text-slate-800">{tenant.hometown || 'Chưa cập nhật'}</span>
+                    </div>
+                    <div className="text-slate-600">
+                      Tiền cọc: <strong className="text-emerald-700 font-bold">{formatVND(tenant.deposit)}</strong>
+                    </div>
+                    {tenant.licensePlate && (
+                      <div className="text-slate-600">
+                        Biển số xe: <span className="font-mono font-semibold text-slate-800">{tenant.licensePlate}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* CCCD 2-face previews */}
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 space-y-1.5">
+                    <span className="text-[11px] font-bold text-slate-700 block">
+                      Ảnh CCCD Lưu Trữ (Mặt Trước & Mặt Sau):
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="h-20 bg-white rounded-lg border border-slate-200 overflow-hidden flex items-center justify-center">
+                        {tenant.idCardFrontUrl ? (
+                          <a href={tenant.idCardFrontUrl} target="_blank" rel="noopener noreferrer">
+                            <img src={tenant.idCardFrontUrl} alt="CCCD Mặt trước" className="w-full h-full object-contain" />
+                          </a>
+                        ) : (
+                          <span className="text-[10px] text-slate-400">Chưa có ảnh trước</span>
+                        )}
+                      </div>
+                      <div className="h-20 bg-white rounded-lg border border-slate-200 overflow-hidden flex items-center justify-center">
+                        {tenant.idCardBackUrl ? (
+                          <a href={tenant.idCardBackUrl} target="_blank" rel="noopener noreferrer">
+                            <img src={tenant.idCardBackUrl} alt="CCCD Mặt sau" className="w-full h-full object-contain" />
+                          </a>
+                        ) : (
+                          <span className="text-[10px] text-slate-400">Chưa có ảnh sau</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Edit Button */}
+                <div className="pt-3 mt-4 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-[10px] text-slate-400">Vào ở: {tenant.startDate || '---'}</span>
+                  <button
+                    type="button"
+                    onClick={() => onOpenTenantModal(tenant)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700"
+                  >
+                    Sửa Thông Tin & CCCD
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB 5: CASH FLOW & EXPENSES (THU - CHI & LỢI NHUẬN) */}
+      {/* ======================================================== */}
+      {activeTab === 'cashflow' && (
+        <div className="space-y-6">
+          
+          {/* Summary Banner */}
+          <div className="bg-slate-900 text-white p-6 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+              <span className="text-xs text-slate-400 uppercase tracking-wider block">
+                Báo Cáo Thu Chi Tháng {currentMonth?.slice(5)}/{currentMonth?.slice(0, 4)}
+              </span>
+              <div className="text-3xl font-black text-amber-300 mt-1">
+                Lợi Nhuận: {formatVND(statistics.netProfit)}
+              </div>
+              <p className="text-xs text-slate-300 mt-1">
+                Tổng thu từ 6 phòng: {formatVND(statistics.totalCollected)} | Tổng chi phí vận hành: {formatVND(statistics.totalExpense)}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={onOpenExpenseModal}
+              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-md shadow-rose-600/20 transition-all shrink-0"
+            >
+              <Plus className="w-4 h-4" /> Thêm Khoản Chi Tiêu
+            </button>
+          </div>
+
+          {/* Expenses List */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs">
+            <h4 className="font-bold text-slate-900 text-base mb-3">
+              Danh Sách Các Khoản Chi Phí Nhà Trọ (Tháng Này)
+            </h4>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                    <th className="p-3">Khoản chi tiêu</th>
+                    <th className="p-3">Danh mục</th>
+                    <th className="p-3">Ngày chi</th>
+                    <th className="p-3 text-right">Số tiền</th>
+                    <th className="p-3 text-center">Chứng từ đính kèm</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 text-slate-700">
+                  {expenses.map(exp => (
+                    <tr key={exp.id} className="hover:bg-slate-50">
+                      <td className="p-3 font-semibold text-slate-900">{exp.title}</td>
+                      <td className="p-3">
+                        <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md text-[11px] font-medium">
+                          {exp.category}
+                        </span>
+                      </td>
+                      <td className="p-3 font-mono text-slate-600">{exp.date}</td>
+                      <td className="p-3 text-right font-black text-rose-600 text-sm">{formatVND(exp.amount)}</td>
+                      <td className="p-3 text-center">
+                        {exp.receiptImageUrl ? (
+                          <a
+                            href={exp.receiptImageUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 font-semibold hover:underline"
+                          >
+                            Xem hóa đơn
+                          </a>
+                        ) : (
+                          <span className="text-slate-400">---</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+
+                  {expenses.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-slate-400">
+                        Chưa có khoản chi tiêu nào trong tháng này.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB 6: SETTINGS (CẤU HÌNH NHÀ TRỌ & GIÁ DỊCH VỤ) */}
+      {/* ======================================================== */}
+      {activeTab === 'settings' && (
+        <form onSubmit={handleSaveSettings} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-2xs space-y-6 max-w-3xl">
+          
+          <div>
+            <h3 className="font-bold text-slate-900 text-lg">
+              Cài Đặt Nhà Trọ & Bảng Giá Dịch Vụ Mặc Định
+            </h3>
+            <p className="text-xs text-slate-500">
+              Cấu hình giá thuê 1.500.000 đ/tháng, wifi 50.000 đ, điện 4.000 đ/kW, nước 12.000 đ/khối và tài khoản VietQR
+            </p>
+          </div>
+
+          {/* Pricing Config */}
+          <div className="bg-blue-50/60 p-4 rounded-2xl border border-blue-200 space-y-3">
+            <span className="font-bold text-blue-900 text-sm block">Đơn Giá Dịch Vụ Mặc Định</span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div>
+                <label className="text-slate-700 font-semibold block mb-1">Giá thuê phòng</label>
+                <input
+                  type="number"
+                  value={settingsForm.defaultRoomPrice || 1500000}
+                  onChange={e => setSettingsForm({ ...settingsForm, defaultRoomPrice: Number(e.target.value) })}
+                  className="w-full px-3 py-2 bg-white border border-blue-200 rounded-xl font-bold"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-slate-700 font-semibold block mb-1">Wifi / Internet</label>
+                <input
+                  type="number"
+                  value={settingsForm.defaultWifiFee || 50000}
+                  onChange={e => setSettingsForm({ ...settingsForm, defaultWifiFee: Number(e.target.value) })}
+                  className="w-full px-3 py-2 bg-white border border-blue-200 rounded-xl font-bold"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-slate-700 font-semibold block mb-1">Điện (đ/kW)</label>
+                <input
+                  type="number"
+                  value={settingsForm.defaultElectricityPrice || 4000}
+                  onChange={e => setSettingsForm({ ...settingsForm, defaultElectricityPrice: Number(e.target.value) })}
+                  className="w-full px-3 py-2 bg-white border border-blue-200 rounded-xl font-bold"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-slate-700 font-semibold block mb-1">Nước (đ/khối)</label>
+                <input
+                  type="number"
+                  value={settingsForm.defaultWaterPrice || 12000}
+                  onChange={e => setSettingsForm({ ...settingsForm, defaultWaterPrice: Number(e.target.value) })}
+                  className="w-full px-3 py-2 bg-white border border-blue-200 rounded-xl font-bold"
+                  required
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* House Info */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div>
+              <label className="font-semibold text-slate-700 block mb-1">Tên nhà trọ</label>
+              <input
+                type="text"
+                value={settingsForm.houseName || ''}
+                onChange={e => setSettingsForm({ ...settingsForm, houseName: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden"
+                required
+              />
+            </div>
+            <div>
+              <label className="font-semibold text-slate-700 block mb-1">Địa chỉ</label>
+              <input
+                type="text"
+                value={settingsForm.address || ''}
+                onChange={e => setSettingsForm({ ...settingsForm, address: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden"
+                required
+              />
+            </div>
+            <div>
+              <label className="font-semibold text-slate-700 block mb-1">Tên chủ trọ</label>
+              <input
+                type="text"
+                value={settingsForm.landlordName || ''}
+                onChange={e => setSettingsForm({ ...settingsForm, landlordName: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden"
+                required
+              />
+            </div>
+            <div>
+              <label className="font-semibold text-slate-700 block mb-1">Số điện thoại liên hệ</label>
+              <input
+                type="text"
+                value={settingsForm.landlordPhone || ''}
+                onChange={e => setSettingsForm({ ...settingsForm, landlordPhone: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-hidden font-mono"
+                required
+              />
+            </div>
+          </div>
+
+          {/* Bank Info for VietQR */}
+          <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200 space-y-3">
+            <span className="font-bold text-emerald-950 text-sm block">
+              Tài Khoản Ngân Hàng Nhận Tiền (Tự động sinh mã VietQR)
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div>
+                <label className="text-slate-700 font-semibold block mb-1">Ngân hàng (Mã viết tắt)</label>
+                <input
+                  type="text"
+                  placeholder="MBBANK, VCB, TECHCOMBANK..."
+                  value={settingsForm.bankName || ''}
+                  onChange={e => setSettingsForm({ ...settingsForm, bankName: e.target.value })}
+                  className="w-full px-3 py-2 bg-white border border-emerald-200 rounded-xl font-bold uppercase"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-slate-700 font-semibold block mb-1">Số tài khoản</label>
+                <input
+                  type="text"
+                  placeholder="0988123456"
+                  value={settingsForm.bankAccount || ''}
+                  onChange={e => setSettingsForm({ ...settingsForm, bankAccount: e.target.value })}
+                  className="w-full px-3 py-2 bg-white border border-emerald-200 rounded-xl font-bold font-mono"
+                  required
+                />
+              </div>
+              <div>
+                <label className="text-slate-700 font-semibold block mb-1">Chủ tài khoản (Không dấu)</label>
+                <input
+                  type="text"
+                  placeholder="NGUYEN VAN HOANG"
+                  value={settingsForm.bankOwner || ''}
+                  onChange={e => setSettingsForm({ ...settingsForm, bankOwner: e.target.value })}
+                  className="w-full px-3 py-2 bg-white border border-emerald-200 rounded-xl font-bold uppercase"
+                  required
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Submit */}
+          <div className="flex items-center justify-end pt-2">
+            <button
+              type="submit"
+              disabled={savingSettings}
+              className="px-6 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 transition-all"
+            >
+              {savingSettings ? 'Đang lưu...' : 'Lưu Tất Cả Cài Đặt'}
+            </button>
+          </div>
+
+        </form>
+      )}
+
+    </div>
+  );
+}
