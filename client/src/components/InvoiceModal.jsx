@@ -11,27 +11,87 @@ export default function InvoiceModal({
 }) {
   const [copiedZalo, setCopiedZalo] = useState(false);
   const [quickPaying, setQuickPaying] = useState(false);
+  const [viewMode, setViewMode] = useState('ALL'); // 'ALL', 'ROOM_ONLY', 'UTILITIES_ONLY'
 
   if (!invoice) return null;
 
+  const roomRentTotal = (Number(invoice.roomPrice) || 0) + (Number(invoice.wifiFee) || 0);
+  const utilitiesTotal = (Number(invoice.electricityCost) || 0) + (Number(invoice.waterCost) || 0) + (Number(invoice.totalExtraFee) || 0) - (Number(invoice.discount) || 0);
+
+  const displayTotal = viewMode === 'ROOM_ONLY'
+    ? roomRentTotal
+    : viewMode === 'UTILITIES_ONLY'
+    ? Math.max(0, utilitiesTotal)
+    : invoice.totalAmount;
+
+  // Tính số tiền cần thanh toán cho từng chế độ
+  const displayRemaining = viewMode === 'ROOM_ONLY'
+    ? (invoice.paidAmount >= roomRentTotal ? 0 : roomRentTotal - invoice.paidAmount)
+    : viewMode === 'UTILITIES_ONLY'
+    ? (invoice.paidAmount >= invoice.totalAmount ? 0 : Math.max(0, invoice.remainingAmount))
+    : invoice.remainingAmount;
+
+  const qrAmount = displayRemaining > 0 ? displayRemaining : displayTotal;
+
+  const memoType = viewMode === 'ROOM_ONLY' ? 'TIEN PHONG' : viewMode === 'UTILITIES_ONLY' ? 'DIEN NUOC' : 'TIEN TRO';
   const qrUrl = getVietQRUrl(
     settings.bankName,
     settings.bankAccount,
     settings.bankOwner,
-    invoice.remainingAmount > 0 ? invoice.remainingAmount : invoice.totalAmount,
-    `${invoice.roomName?.replace(/[^0-9]/g, 'P') || 'P'} T${invoice.month?.replace('-', '')}`
+    qrAmount,
+    `${invoice.roomName?.replace(/[^0-9]/g, 'P') || 'P'} ${memoType} T${invoice.month?.replace('-', '')}`
   );
 
+  const rentDay = invoice.rentDueDay || (invoice.schedule?.actualRentDay) || '10';
+  const rentCycleStr = invoice.rentCycleStr || (invoice.schedule?.rentCycleStr) || '1 tháng';
+
   const handleCopyZalo = () => {
-    const rentDay = invoice.rentDueDay || (invoice.schedule?.actualRentDay) || '10';
-    const rentCycleStr = invoice.rentCycleStr || (invoice.schedule?.rentCycleStr) || '1 tháng';
-    const text = `🏠 THÔNG BÁO TIỀN PHÒNG & ĐIỆN NƯỚC THÁNG ${invoice.month?.slice(5)}/${invoice.month?.slice(0, 4)} - ${invoice.roomName}
+    let text = '';
+    if (viewMode === 'ROOM_ONLY') {
+      text = `🏠 THÔNG BÁO TIỀN PHÒNG THÁNG ${invoice.month?.slice(5)}/${invoice.month?.slice(0, 4)} - ${invoice.roomName}
+👤 Khách thuê: ${invoice.tenantName || 'Anh/Chị'}
+------------------------------------
+1️⃣ Tiền thuê phòng: ${formatVND(invoice.roomPrice)}
+   (Kỳ thuê: ${rentCycleStr} • Thu đúng ngày ${rentDay} hàng tháng theo HĐ)
+2️⃣ Phí Internet/Wifi: ${formatVND(invoice.wifiFee)}
+------------------------------------
+👉 TỔNG TIỀN PHÒNG: ${formatVND(roomRentTotal)}
+⏰ HẠN THANH TOÁN: Đúng ngày ${rentDay} hàng tháng theo HĐ
+⚡ Tiền điện và nước chốt vào ngày 1 Tây hàng tháng sẽ gửi thông báo riêng.
+------------------------------------
+💳 THÔNG TIN CHUYỂN KHOẢN:
+- Ngân hàng: ${settings.bankName}
+- Số tài khoản: ${settings.bankAccount}
+- Chủ tài khoản: ${settings.bankOwner}
+- Số tiền: ${formatVND(roomRentTotal)}
+- Nội dung: ${invoice.roomName?.replace(/[^0-9]/g, 'P')} TIEN PHONG T${invoice.month?.replace('-', '')}
+Cảm ơn anh/chị!`;
+    } else if (viewMode === 'UTILITIES_ONLY') {
+      text = `⚡ THÔNG BÁO TIỀN ĐIỆN & NƯỚC THÁNG ${invoice.month?.slice(5)}/${invoice.month?.slice(0, 4)} - ${invoice.roomName}
+👤 Khách thuê: ${invoice.tenantName || 'Anh/Chị'}
+------------------------------------
+1️⃣ Tiền điện (Chốt ngày 1 Tây: ${invoice.oldElectricity} ➡️ ${invoice.newElectricity} = ${invoice.electricityUsage} kWh x ${formatVND(invoice.electricityPrice)}): ${formatVND(invoice.electricityCost)}
+2️⃣ Tiền nước (Chốt ngày 20 Tây: ${invoice.oldWater} ➡️ ${invoice.newWater} = ${invoice.waterUsage} m³ x ${formatVND(invoice.waterPrice)}): ${formatVND(invoice.waterCost)}
+${invoice.extraFees && invoice.extraFees.length > 0 ? invoice.extraFees.map(f => `3️⃣ ${f.name}: ${formatVND(f.amount)}`).join('\n') : ''}
+------------------------------------
+👉 TỔNG TIỀN ĐIỆN NƯỚC: ${formatVND(utilitiesTotal)}
+⏰ HẠN THANH TOÁN: Thu đầu tháng (ngày 1 Tây)
+------------------------------------
+💳 THÔNG TIN CHUYỂN KHOẢN:
+- Ngân hàng: ${settings.bankName}
+- Số tài khoản: ${settings.bankAccount}
+- Chủ tài khoản: ${settings.bankOwner}
+- Số tiền: ${formatVND(utilitiesTotal)}
+- Nội dung: ${invoice.roomName?.replace(/[^0-9]/g, 'P')} DIEN NUOC T${invoice.month?.replace('-', '')}
+Cảm ơn anh/chị!`;
+    } else {
+      text = `🏠 THÔNG BÁO TIỀN TRỌ & DỊCH VỤ THÁNG ${invoice.month?.slice(5)}/${invoice.month?.slice(0, 4)} - ${invoice.roomName}
 👤 Khách thuê: ${invoice.tenantName || 'Anh/Chị'}
 ------------------------------------
 1️⃣ Tiền thuê phòng: ${formatVND(invoice.roomPrice)}
    (Kỳ thuê: ${rentCycleStr} • Thu đúng ngày ${rentDay} hàng tháng theo HĐ)
 2️⃣ Tiền điện (Chốt ngày 1 Tây: ${invoice.oldElectricity} ➡️ ${invoice.newElectricity} = ${invoice.electricityUsage} kWh x ${formatVND(invoice.electricityPrice)}): ${formatVND(invoice.electricityCost)}
-3️⃣ Tiền nước (Chốt ngày 1 Tây: ${invoice.oldWater} ➡️ ${invoice.newWater} = ${invoice.waterUsage} m³ x ${formatVND(invoice.waterPrice)}): ${formatVND(invoice.waterCost)}
+3️⃣ Tiền nước (Chốt ngày 20 Tây: ${invoice.oldWater} ➡️ ${invoice.newWater} = ${invoice.waterUsage} m³ x ${formatVND(invoice.waterPrice)}): ${formatVND(invoice.waterCost)}
 4️⃣ Phí Internet/Wifi: ${formatVND(invoice.wifiFee)}
 ${invoice.extraFees && invoice.extraFees.length > 0 ? invoice.extraFees.map(f => `5️⃣ ${f.name}: ${formatVND(f.amount)}`).join('\n') : ''}
 ${invoice.discount > 0 ? `🔻 Giảm trừ: -${formatVND(invoice.discount)}` : ''}
@@ -41,27 +101,44 @@ ${invoice.paidAmount > 0 ? `✅ Đã thanh toán: ${formatVND(invoice.paidAmount
 ------------------------------------
 ⏰ LỊCH VÀ HẠN THANH TOÁN:
 - 🏠 Tiền phòng: Thu đúng ngày ${rentDay} hàng tháng (kỳ ${rentCycleStr})
-- ⚡ Tiền điện & nước: Chốt và thu ngày 1 Tây hàng tháng
+- ⚡ Tiền điện & nước: Chốt và thu đầu tháng (ngày 1 Tây)
 💳 THÔNG TIN CHUYỂN KHOẢN:
 - Ngân hàng: ${settings.bankName}
 - Số tài khoản: ${settings.bankAccount}
 - Chủ tài khoản: ${settings.bankOwner}
 - Nội dung: ${invoice.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${invoice.month?.replace('-', '')}
 Cảm ơn anh/chị!`;
+    }
 
     navigator.clipboard.writeText(text);
     setCopiedZalo(true);
     setTimeout(() => setCopiedZalo(false), 2500);
   };
 
-  const handleQuickPay = async (method = 'CASH') => {
-    if (!confirm(`Xác nhận đã nhận đủ ${formatVND(invoice.remainingAmount)} từ ${invoice.roomName}?`)) return;
+  const handleQuickPay = async (type = 'ALL', method = 'CASH') => {
+    let amountToPay = invoice.remainingAmount;
+    let label = 'toàn bộ hóa đơn';
+
+    if (type === 'ROOM_ONLY') {
+      amountToPay = invoice.paidAmount >= roomRentTotal ? 0 : roomRentTotal - invoice.paidAmount;
+      label = `tiền phòng (${formatVND(amountToPay)})`;
+    } else if (type === 'UTILITIES_ONLY') {
+      amountToPay = invoice.remainingAmount;
+      label = `tiền điện nước (${formatVND(amountToPay)})`;
+    }
+
+    if (amountToPay <= 0) {
+      alert('Khoản này đã được thanh toán đầy đủ!');
+      return;
+    }
+
+    if (!confirm(`Xác nhận đã nhận ${label} từ ${invoice.roomName}?`)) return;
     setQuickPaying(true);
     try {
       await quickPayInvoice(invoice.id, {
         paymentMethod: method,
-        amount: invoice.remainingAmount,
-        note: `Chủ trọ xác nhận nhận tiền ${method === 'CASH' ? 'mặt' : 'chuyển khoản'}`
+        amount: amountToPay,
+        note: `Chủ trọ xác nhận nhận ${type === 'ROOM_ONLY' ? 'tiền phòng theo ngày HĐ' : type === 'UTILITIES_ONLY' ? 'tiền điện nước 1 Tây' : 'thanh toán'} (${method === 'CASH' ? 'Tiền mặt' : 'Chuyển khoản'})`
       });
       if (onRefresh) onRefresh();
       onClose();
@@ -116,12 +193,65 @@ Cảm ơn anh/chị!`;
       </tr>
     ` : '';
 
+    const billTitle = viewMode === 'ROOM_ONLY'
+      ? 'PHIẾU THU TIỀN PHÒNG (KỲ KÝ HỢP ĐỒNG)'
+      : viewMode === 'UTILITIES_ONLY'
+      ? 'PHIẾU THU TIỀN ĐIỆN & NƯỚC (CHỐT ĐẦU THÁNG)'
+      : 'HÓA ĐƠN TIỀN TRỌ & DỊCH VỤ';
+
+    const showRoom = viewMode === 'ALL' || viewMode === 'ROOM_ONLY';
+    const showUtilities = viewMode === 'ALL' || viewMode === 'UTILITIES_ONLY';
+
+    const roomPriceRow = showRoom ? `
+      <tr>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1;">
+          <div style="font-weight: bold;">1. Tiền thuê phòng</div>
+          <div style="font-size: 11px; color: #0284c7;">Kỳ: ${rentCycleStr} (Thu đúng ngày ${rentDay} hàng tháng theo HĐ)</div>
+        </td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center; color: #94a3b8;">---</td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center;">1 tháng</td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right;">${formatVND(invoice.roomPrice)}</td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right; font-weight: bold;">${formatVND(invoice.roomPrice)}</td>
+      </tr>
+      <tr>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1;"><div style="font-weight: bold;">2. Phí Wifi Internet</div></td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center; color: #94a3b8;">---</td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center;">1 phòng</td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right;">${formatVND(invoice.wifiFee)}</td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right; font-weight: bold;">${formatVND(invoice.wifiFee)}</td>
+      </tr>
+    ` : '';
+
+    const utilitiesRows = showUtilities ? `
+      <tr>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1;">
+          <div style="font-weight: bold;">${showRoom ? '3. Tiền điện' : '1. Tiền điện'}</div>
+          <div style="font-size: 11px; color: #64748b;">Đồng hồ riêng • Chốt ngày 1 Tây</div>
+        </td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold;">${invoice.oldElectricity} ➔ ${invoice.newElectricity}</td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold; color: #2563eb;">${invoice.electricityUsage} kWh</td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right;">${formatVND(invoice.electricityPrice)}</td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right; font-weight: bold;">${formatVND(invoice.electricityCost)}</td>
+      </tr>
+      <tr>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1;">
+          <div style="font-weight: bold;">${showRoom ? '4. Tiền nước' : '2. Tiền nước'}</div>
+          <div style="font-size: 11px; color: #64748b;">Đồng hồ riêng • Chốt ngày 20 Tây</div>
+        </td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold;">${invoice.oldWater} ➔ ${invoice.newWater}</td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold; color: #0891b2;">${invoice.waterUsage} m³</td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right;">${formatVND(invoice.waterPrice)}</td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right; font-weight: bold;">${formatVND(invoice.waterCost)}</td>
+      </tr>
+      ${extraFeesRows}
+    ` : '';
+
     const html = `
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="utf-8">
-        <title>Hóa Đơn ${invoice.invoiceCode || ''} - ${invoice.roomName || ''}</title>
+        <title>${billTitle} - ${invoice.roomName || ''}</title>
         <style>
           @page { size: A4 portrait; margin: 12mm; }
           body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: #0f172a; margin: 0; padding: 20px; font-size: 13px; line-height: 1.5; }
@@ -129,6 +259,7 @@ Cảm ơn anh/chị!`;
           .title { font-size: 20px; font-weight: 800; color: #0f172a; margin: 0 0 4px; text-transform: uppercase; }
           .subtitle { font-size: 12px; color: #475569; margin: 2px 0; }
           .badge { display: inline-block; padding: 4px 10px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; font-family: monospace; font-size: 13px; font-weight: bold; }
+          .bill-tag { display: inline-block; padding: 3px 8px; background: #e0f2fe; color: #0369a1; border-radius: 4px; font-weight: bold; font-size: 11px; margin-top: 4px; }
           .info-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px; }
           table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
           th { background: #f1f5f9; border: 1px solid #cbd5e1; padding: 10px 8px; text-align: left; font-size: 12px; font-weight: bold; color: #334155; }
@@ -148,7 +279,8 @@ Cảm ơn anh/chị!`;
         <div class="header">
           <div>
             <h1 class="title">${settings.houseName || 'HỆ THỐNG NHÀ TRỌ'}</h1>
-            <p class="subtitle">Địa chỉ: <strong>${settings.address || ''}</strong></p>
+            <div class="bill-tag">${billTitle}</div>
+            <p class="subtitle" style="margin-top: 6px;">Địa chỉ: <strong>${settings.address || ''}</strong></p>
             <p class="subtitle">Chủ trọ: <strong>${settings.landlordName || ''}</strong> - Hotline: <strong>${settings.landlordPhone || ''}</strong></p>
           </div>
           <div style="text-align: right;">
@@ -176,48 +308,12 @@ Cảm ơn anh/chị!`;
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td style="padding: 9px 8px; border: 1px solid #cbd5e1;">
-                <div style="font-weight: bold;">1. Tiền thuê phòng</div>
-                <div style="font-size: 11px; color: #0284c7;">Kỳ: ${rentCycleStr} (Thu đúng ngày ${rentDay} hàng tháng)</div>
-              </td>
-              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center; color: #94a3b8;">---</td>
-              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center;">1 tháng</td>
-              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right;">${formatVND(invoice.roomPrice)}</td>
-              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right; font-weight: bold;">${formatVND(invoice.roomPrice)}</td>
-            </tr>
-            <tr>
-              <td style="padding: 9px 8px; border: 1px solid #cbd5e1;">
-                <div style="font-weight: bold;">2. Tiền điện</div>
-                <div style="font-size: 11px; color: #64748b;">Đồng hồ riêng • Chốt ngày 1 Tây</div>
-              </td>
-              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold;">${invoice.oldElectricity} ➔ ${invoice.newElectricity}</td>
-              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold; color: #2563eb;">${invoice.electricityUsage} kWh</td>
-              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right;">${formatVND(invoice.electricityPrice)}</td>
-              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right; font-weight: bold;">${formatVND(invoice.electricityCost)}</td>
-            </tr>
-            <tr>
-              <td style="padding: 9px 8px; border: 1px solid #cbd5e1;">
-                <div style="font-weight: bold;">3. Tiền nước</div>
-                <div style="font-size: 11px; color: #64748b;">Đồng hồ riêng • Chốt ngày 1 Tây</div>
-              </td>
-              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold;">${invoice.oldWater} ➔ ${invoice.newWater}</td>
-              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold; color: #0891b2;">${invoice.waterUsage} m³</td>
-              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right;">${formatVND(invoice.waterPrice)}</td>
-              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right; font-weight: bold;">${formatVND(invoice.waterCost)}</td>
-            </tr>
-            <tr>
-              <td style="padding: 9px 8px; border: 1px solid #cbd5e1;"><div style="font-weight: bold;">4. Phí Wifi Internet</div></td>
-              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center; color: #94a3b8;">---</td>
-              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center;">1 phòng</td>
-              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right;">${formatVND(invoice.wifiFee)}</td>
-              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right; font-weight: bold;">${formatVND(invoice.wifiFee)}</td>
-            </tr>
-            ${extraFeesRows}
+            ${roomPriceRow}
+            ${utilitiesRows}
             ${discountRow}
             <tr class="total-row">
               <td colspan="4" style="padding: 12px; text-align: right; font-size: 13px;">TỔNG CỘNG TIỀN PHẢI NỘP:</td>
-              <td style="padding: 12px; text-align: right; font-size: 16px; color: #fde047;">${formatVND(invoice.totalAmount)}</td>
+              <td style="padding: 12px; text-align: right; font-size: 16px; color: #fde047;">${formatVND(displayTotal)}</td>
             </tr>
             ${paidRow}
             ${remainingRow}
@@ -230,8 +326,8 @@ Cảm ơn anh/chị!`;
             <div style="font-weight: bold; color: #1e3a8a; font-size: 13px;">THÔNG TIN CHUYỂN KHOẢN VIETQR:</div>
             <div>Ngân hàng: <strong>${settings.bankName || ''}</strong> • STK: <strong>${settings.bankAccount || ''}</strong></div>
             <div>Chủ tài khoản: <strong>${settings.bankOwner || ''}</strong></div>
-            <div>Số tiền: <strong style="color: #dc2626;">${formatVND(invoice.remainingAmount > 0 ? invoice.remainingAmount : invoice.totalAmount)}</strong></div>
-            <div>Nội dung: <strong>${(invoice.roomName?.replace(/[^0-9]/g, 'P') || 'P') + ' TIEN TRO T' + (invoice.month?.replace('-', '') || '')}</strong></div>
+            <div>Số tiền: <strong style="color: #dc2626;">${formatVND(qrAmount)}</strong></div>
+            <div>Nội dung: <strong>${(invoice.roomName?.replace(/[^0-9]/g, 'P') || 'P') + ' ' + memoType + ' T' + (invoice.month?.replace('-', '') || '')}</strong></div>
           </div>
         </div>
 
@@ -343,6 +439,45 @@ Cảm ơn anh/chị!`;
             </div>
           </div>
 
+          {/* Mode Selector (Cả hóa đơn / Chỉ tiền phòng / Chỉ điện nước) */}
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setViewMode('ALL')}
+              className={`flex-1 py-1.5 px-2.5 rounded-lg transition-all cursor-pointer ${
+                viewMode === 'ALL'
+                  ? 'bg-white text-blue-700 shadow-xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              📄 Hóa Đơn Đầy Đủ
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('ROOM_ONLY')}
+              className={`flex-1 py-1.5 px-2.5 rounded-lg transition-all cursor-pointer ${
+                viewMode === 'ROOM_ONLY'
+                  ? 'bg-white text-blue-700 shadow-xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Tính và thu tiền phòng đúng ngày ký hợp đồng"
+            >
+              🏠 Chỉ Tiền Phòng ({formatVND(roomRentTotal)})
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('UTILITIES_ONLY')}
+              className={`flex-1 py-1.5 px-2.5 rounded-lg transition-all cursor-pointer ${
+                viewMode === 'UTILITIES_ONLY'
+                  ? 'bg-white text-blue-700 shadow-xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Chốt và thu tiền điện nước ngày 1 Tây hàng tháng"
+            >
+              ⚡ Chỉ Điện & Nước ({formatVND(utilitiesTotal)})
+            </button>
+          </div>
+
           {/* Calculation Table */}
           <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
             <table className="w-full text-left text-xs border-collapse">
@@ -356,74 +491,82 @@ Cảm ơn anh/chị!`;
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 text-slate-700">
-                {/* Tiền phòng */}
-                <tr>
-                  <td className="p-3">
-                    <div className="font-semibold text-slate-900">1. Tiền phòng</div>
-                    <span className="text-[11px] text-blue-700 font-medium block">
-                      Kỳ: {invoice.rentCycleStr || (invoice.schedule?.rentCycleStr) || '1 tháng'} • Hạn: Ngày {invoice.rentDueDay || 1} hàng tháng
-                    </span>
-                  </td>
-                  <td className="p-3 text-center text-slate-400">---</td>
-                  <td className="p-3 text-center">1 tháng</td>
-                  <td className="p-3 text-right">{formatVND(invoice.roomPrice)}</td>
-                  <td className="p-3 text-right font-bold text-slate-900">{formatVND(invoice.roomPrice)}</td>
-                </tr>
+                {/* Tiền phòng (Hiển thị ở chế độ ALL và ROOM_ONLY) */}
+                {(viewMode === 'ALL' || viewMode === 'ROOM_ONLY') && (
+                  <>
+                    <tr>
+                      <td className="p-3">
+                        <div className="font-semibold text-slate-900">1. Tiền phòng</div>
+                        <span className="text-[11px] text-blue-700 font-medium block">
+                          Kỳ: {invoice.rentCycleStr || (invoice.schedule?.rentCycleStr) || '1 tháng'} • Hạn: Ngày {invoice.rentDueDay || 1} hàng tháng
+                        </span>
+                      </td>
+                      <td className="p-3 text-center text-slate-400">---</td>
+                      <td className="p-3 text-center">1 tháng</td>
+                      <td className="p-3 text-right">{formatVND(invoice.roomPrice)}</td>
+                      <td className="p-3 text-right font-bold text-slate-900">{formatVND(invoice.roomPrice)}</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 font-semibold text-slate-900">2. Phí Wifi Internet</td>
+                      <td className="p-3 text-center text-slate-400">---</td>
+                      <td className="p-3 text-center">1 phòng</td>
+                      <td className="p-3 text-right">{formatVND(invoice.wifiFee)}</td>
+                      <td className="p-3 text-right font-bold text-slate-900">{formatVND(invoice.wifiFee)}</td>
+                    </tr>
+                  </>
+                )}
 
-                {/* Tiền điện */}
-                <tr>
-                  <td className="p-3">
-                    <div className="font-semibold text-slate-900">2. Tiền điện</div>
-                    <span className="text-[11px] text-slate-500">Đồng hồ riêng • Chốt ngày 1 Tây</span>
-                  </td>
-                  <td className="p-3 text-center font-mono">
-                    {invoice.oldElectricity} ➔ {invoice.newElectricity}
-                  </td>
-                  <td className="p-3 text-center font-bold text-blue-600">
-                    {invoice.electricityUsage} <span className="font-normal text-slate-500">kWh</span>
-                  </td>
-                  <td className="p-3 text-right">{formatVND(invoice.electricityPrice)}</td>
-                  <td className="p-3 text-right font-bold text-slate-900">{formatVND(invoice.electricityCost)}</td>
-                </tr>
-
-                {/* Tiền nước */}
-                <tr>
-                  <td className="p-3">
-                    <div className="font-semibold text-slate-900">3. Tiền nước</div>
-                    <span className="text-[11px] text-slate-500">Đồng hồ nước máy • Chốt ngày 1 Tây</span>
-                  </td>
-                  <td className="p-3 text-center font-mono">
-                    {invoice.oldWater} ➔ {invoice.newWater}
-                  </td>
-                  <td className="p-3 text-center font-bold text-cyan-600">
-                    {invoice.waterUsage} <span className="font-normal text-slate-500">m³</span>
-                  </td>
-                  <td className="p-3 text-right">{formatVND(invoice.waterPrice)}</td>
-                  <td className="p-3 text-right font-bold text-slate-900">{formatVND(invoice.waterCost)}</td>
-                </tr>
-
-                {/* Phí Wifi */}
-                <tr>
-                  <td className="p-3 font-semibold text-slate-900">4. Phí Wifi Internet</td>
-                  <td className="p-3 text-center text-slate-400">---</td>
-                  <td className="p-3 text-center">1 phòng</td>
-                  <td className="p-3 text-right">{formatVND(invoice.wifiFee)}</td>
-                  <td className="p-3 text-right font-bold text-slate-900">{formatVND(invoice.wifiFee)}</td>
-                </tr>
-
-                {/* Extra Fees */}
-                {invoice.extraFees && invoice.extraFees.map((fee, idx) => (
-                  <tr key={idx} className="bg-slate-50/50">
-                    <td className="p-3 font-medium text-slate-800">5.{idx + 1}. {fee.name}</td>
-                    <td className="p-3 text-center text-slate-400">---</td>
-                    <td className="p-3 text-center">Cố định</td>
-                    <td className="p-3 text-right">{formatVND(fee.amount)}</td>
-                    <td className="p-3 text-right font-bold text-slate-900">{formatVND(fee.amount)}</td>
-                  </tr>
-                ))}
+                {/* Tiền điện & Nước (Hiển thị ở chế độ ALL và UTILITIES_ONLY) */}
+                {(viewMode === 'ALL' || viewMode === 'UTILITIES_ONLY') && (
+                  <>
+                    <tr>
+                      <td className="p-3">
+                        <div className="font-semibold text-slate-900">
+                          {viewMode === 'ALL' ? '3. Tiền điện' : '1. Tiền điện'}
+                        </div>
+                        <span className="text-[11px] text-slate-500">Đồng hồ riêng • Chốt ngày 1 Tây</span>
+                      </td>
+                      <td className="p-3 text-center font-mono">
+                        {invoice.oldElectricity} ➔ {invoice.newElectricity}
+                      </td>
+                      <td className="p-3 text-center font-bold text-blue-600">
+                        {invoice.electricityUsage} <span className="font-normal text-slate-500">kWh</span>
+                      </td>
+                      <td className="p-3 text-right">{formatVND(invoice.electricityPrice)}</td>
+                      <td className="p-3 text-right font-bold text-slate-900">{formatVND(invoice.electricityCost)}</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3">
+                        <div className="font-semibold text-slate-900">
+                          {viewMode === 'ALL' ? '4. Tiền nước' : '2. Tiền nước'}
+                        </div>
+                        <span className="text-[11px] text-slate-500">Đồng hồ riêng • Chốt ngày 20 Tây</span>
+                      </td>
+                      <td className="p-3 text-center font-mono">
+                        {invoice.oldWater} ➔ {invoice.newWater}
+                      </td>
+                      <td className="p-3 text-center font-bold text-cyan-600">
+                        {invoice.waterUsage} <span className="font-normal text-slate-500">m³</span>
+                      </td>
+                      <td className="p-3 text-right">{formatVND(invoice.waterPrice)}</td>
+                      <td className="p-3 text-right font-bold text-slate-900">{formatVND(invoice.waterCost)}</td>
+                    </tr>
+                    {invoice.extraFees && invoice.extraFees.map((fee, idx) => (
+                      <tr key={idx} className="bg-slate-50/50">
+                        <td className="p-3 font-medium text-slate-800">
+                          {viewMode === 'ALL' ? `5.${idx + 1}. ${fee.name}` : `3.${idx + 1}. ${fee.name}`}
+                        </td>
+                        <td className="p-3 text-center text-slate-400">---</td>
+                        <td className="p-3 text-center">Cố định</td>
+                        <td className="p-3 text-right">{formatVND(fee.amount)}</td>
+                        <td className="p-3 text-right font-bold text-slate-900">{formatVND(fee.amount)}</td>
+                      </tr>
+                    ))}
+                  </>
+                )}
 
                 {/* Discount if any */}
-                {invoice.discount > 0 && (
+                {invoice.discount > 0 && viewMode === 'ALL' && (
                   <tr className="bg-emerald-50/50 text-emerald-800">
                     <td className="p-3 font-medium">Giảm trừ / Khuyến mãi</td>
                     <td className="p-3 text-center text-slate-400">---</td>
@@ -436,10 +579,14 @@ Cảm ơn anh/chị!`;
               <tfoot>
                 <tr className="bg-slate-900 text-white font-bold text-sm">
                   <td colSpan={4} className="p-3 text-right uppercase tracking-wider">
-                    Tổng cộng thanh toán:
+                    {viewMode === 'ROOM_ONLY'
+                      ? 'Tổng tiền phòng:'
+                      : viewMode === 'UTILITIES_ONLY'
+                      ? 'Tổng tiền điện nước:'
+                      : 'Tổng cộng thanh toán:'}
                   </td>
                   <td className="p-3 text-right text-base text-amber-300">
-                    {formatVND(invoice.totalAmount)}
+                    {formatVND(displayTotal)}
                   </td>
                 </tr>
                 {invoice.paidAmount > 0 && (
@@ -452,13 +599,13 @@ Cảm ơn anh/chị!`;
                     </td>
                   </tr>
                 )}
-                {invoice.remainingAmount > 0 && invoice.paidAmount > 0 && (
+                {displayRemaining > 0 && invoice.paidAmount > 0 && (
                   <tr className="bg-rose-50 text-xs">
                     <td colSpan={4} className="p-2 text-right font-bold text-rose-700">
                       Còn nợ lại:
                     </td>
                     <td className="p-2 text-right font-black text-rose-600">
-                      {formatVND(invoice.remainingAmount)}
+                      {formatVND(displayRemaining)}
                     </td>
                   </tr>
                 )}
@@ -478,16 +625,20 @@ Cảm ơn anh/chị!`;
             <div className="text-xs space-y-1 text-slate-700 flex-1">
               <div className="flex items-center gap-1.5 font-bold text-blue-900 text-sm">
                 <QrCode className="w-4 h-4 text-blue-600" />
-                Mã QR Thanh Toán Ngân Hàng (VietQR)
+                Mã QR Chuyển Khoản (VietQR) - {viewMode === 'ROOM_ONLY' ? 'Tiền Phòng (Ngày HĐ)' : viewMode === 'UTILITIES_ONLY' ? 'Tiền Điện & Nước (1 Tây)' : 'Toàn Bộ Hóa Đơn'}
               </div>
               <p className="text-slate-600">
-                Quét mã trên bằng bất kỳ ứng dụng ngân hàng nào (MB, Vietcombank, Momo, Techcombank...) để thanh toán tự động đúng số tiền và nội dung.
+                {viewMode === 'ROOM_ONLY'
+                  ? 'Quét mã để chuyển khoản đúng tiền phòng + wifi (1.550.000 đ) vào ngày ký HĐ. Tiền điện nước sẽ chốt riêng ngày 1 Tây.'
+                  : viewMode === 'UTILITIES_ONLY'
+                  ? 'Quét mã để chuyển khoản tiền điện nước chốt đầu tháng ngày 1 Tây.'
+                  : 'Quét mã trên bằng bất kỳ ứng dụng ngân hàng nào (MB, Vietcombank, Momo, Techcombank...) để thanh toán tự động đúng số tiền và nội dung.'}
               </p>
               <div className="pt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px] font-mono text-slate-800">
                 <div>Ngân hàng: <strong>{settings.bankName}</strong></div>
                 <div>Chủ TK: <strong>{settings.bankOwner}</strong></div>
                 <div>STK: <strong>{settings.bankAccount}</strong></div>
-                <div>Số tiền: <strong className="text-rose-600">{formatVND(invoice.remainingAmount > 0 ? invoice.remainingAmount : invoice.totalAmount)}</strong></div>
+                <div>Số tiền: <strong className="text-rose-600">{formatVND(qrAmount)}</strong></div>
               </div>
             </div>
           </div>
@@ -586,21 +737,57 @@ Cảm ơn anh/chị!`;
 
           <div className="flex items-center gap-2">
             {invoice.status !== 'PAID' && (
-              <button
-                type="button"
-                disabled={quickPaying}
-                onClick={() => handleQuickPay('CASH')}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors"
-              >
-                <Check className="w-4 h-4" />
-                {quickPaying ? 'Đang xử lý...' : 'Xác Nhận Đã Thu Tiền'}
-              </button>
+              <>
+                {viewMode === 'ROOM_ONLY' ? (
+                  invoice.paidAmount >= roomRentTotal ? (
+                    <span className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800">
+                      <Check className="w-4 h-4" /> Đã thu đủ tiền phòng
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={quickPaying}
+                      onClick={() => handleQuickPay('ROOM_ONLY', 'CASH')}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors cursor-pointer"
+                    >
+                      <Check className="w-4 h-4" />
+                      {quickPaying ? 'Đang xử lý...' : `Xác Nhận Thu Tiền Phòng (${formatVND(roomRentTotal - (invoice.paidAmount || 0))})`}
+                    </button>
+                  )
+                ) : viewMode === 'UTILITIES_ONLY' ? (
+                  invoice.remainingAmount <= 0 ? (
+                    <span className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800">
+                      <Check className="w-4 h-4" /> Đã thu đủ điện nước
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={quickPaying}
+                      onClick={() => handleQuickPay('UTILITIES_ONLY', 'CASH')}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors cursor-pointer"
+                    >
+                      <Check className="w-4 h-4" />
+                      {quickPaying ? 'Đang xử lý...' : `Xác Nhận Thu Điện Nước (${formatVND(invoice.remainingAmount)})`}
+                    </button>
+                  )
+                ) : (
+                  <button
+                    type="button"
+                    disabled={quickPaying}
+                    onClick={() => handleQuickPay('ALL', 'CASH')}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Check className="w-4 h-4" />
+                    {quickPaying ? 'Đang xử lý...' : `Xác Nhận Thu Toàn Bộ (${formatVND(invoice.remainingAmount)})`}
+                  </button>
+                )}
+              </>
             )}
 
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors"
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer"
             >
               Đóng
             </button>
