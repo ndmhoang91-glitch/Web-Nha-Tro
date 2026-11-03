@@ -208,82 +208,87 @@ function initDatabase() {
         defaultWifiFee, defaultElectricityPrice, defaultWaterPrice,
         defaultGarbageFee, billDueDay, managerPassword
       ) VALUES (
-        1, 'Nhà Trọ Hoàng Phát', '45A/23A, Khóm 3, Đinh Tiên Hoàng, Phường Tân Hạnh, Tỉnh Vĩnh Long',
-        'Nguyễn Văn Hoàng', '0988123456',
-        'MBBANK', '0988123456', 'NGUYEN VAN HOANG',
-        1500000, 50000, 4000, 12000, 30000, 5, 'admin123'
+        1, 'Nhà Trọ Hoàng Phát', '45A/23A, Đinh Tiên Hoàng, Phường Tân Hạnh, Tỉnh Vĩnh Long',
+        'Nguyễn Đặng Minh Hoàng', '0829506597',
+        'TECHCOMBANK', '8868357117', 'NGUYEN DANG MINH HOANG',
+        1500000, 50000, 4000, 12000, 30000, 5, 'Hoang@357117'
       )
     `).run();
   }
 
-  // Seed default 6 rooms if database is fresh
+  // Seed default 6 rooms & tenants & historical invoices if database is fresh
   const roomsCount = db.prepare('SELECT COUNT(*) as count FROM rooms').get().count;
   if (roomsCount === 0) {
     const insertRoom = db.prepare(`
-      INSERT INTO rooms (name, floor, basePrice, wifiFee, status, area, description, notes)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO rooms (id, name, floor, basePrice, wifiFee, status, area, description, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    const r1 = insertRoom.run('Phòng số 1', 1, 1500000, 50000, 'AVAILABLE', 18, 'Phòng tầng trệt, thoáng mát, vệ sinh khép kín', '');
-    const r2 = insertRoom.run('Phòng số 2', 1, 1500000, 50000, 'AVAILABLE', 18, 'Phòng tầng trệt, thoáng mát, vệ sinh khép kín', '');
-    const r3 = insertRoom.run('Phòng số 3', 1, 1500000, 50000, 'OCCUPIED', 18, 'Phòng tầng trệt, thoáng mát, vệ sinh khép kín', '');
-    const r4 = insertRoom.run('Phòng số 4', 1, 1500000, 50000, 'AVAILABLE', 18, 'Phòng tầng trệt, thoáng mát, vệ sinh khép kín', '');
-    const r5 = insertRoom.run('Phòng số 5', 1, 1500000, 50000, 'AVAILABLE', 18, 'Phòng tầng trệt, thoáng mát, vệ sinh khép kín', '');
-    const r6 = insertRoom.run('Phòng số 6', 1, 1500000, 50000, 'AVAILABLE', 18, 'Phòng tầng trệt, thoáng mát, vệ sinh khép kín', '');
+    insertRoom.run(1, 'Phòng số 1', 1, 1500000, 50000, 'OCCUPIED', 18, 'Phòng tầng trệt, thoáng mát, vệ sinh khép kín', '');
+    insertRoom.run(2, 'Phòng số 2', 1, 1500000, 50000, 'OCCUPIED', 18, 'Phòng tầng trệt, thoáng mát, vệ sinh khép kín', '');
+    insertRoom.run(3, 'Phòng số 3', 1, 1500000, 50000, 'OCCUPIED', 18, 'Phòng tầng trệt, thoáng mát, vệ sinh khép kín', '');
+    insertRoom.run(4, 'Phòng số 4', 1, 1500000, 50000, 'OCCUPIED', 18, 'Phòng tầng trệt, thoáng mát, vệ sinh khép kín', '');
+    insertRoom.run(5, 'Phòng số 5', 1, 1500000, 50000, 'OCCUPIED', 18, 'Phòng tầng trệt, thoáng mát, vệ sinh khép kín', '');
+    insertRoom.run(6, 'Phòng số 6', 1, 1500000, 50000, 'OCCUPIED', 18, 'Phòng tầng trệt, thoáng mát, vệ sinh khép kín', '');
 
-    const room3Id = r3.lastInsertRowid;
     const now = new Date().toISOString();
 
-    // Seed tenant Nguyễn Mỹ Trân in Phòng số 3
-    db.prepare(`
+    const insertTenant = db.prepare(`
       INSERT INTO tenants (
-        roomId, fullName, phone, password, idCardNumber, idCardDate,
-        idCardPlace, idCardFrontUrl, idCardBackUrl, hometown,
+        id, roomId, fullName, phone, password, idCardNumber, idCardDate, idCardPlace,
+        idCardFrontUrl, idCardBackUrl, dateOfBirth, gender, hometown, licensePlate,
         startDate, deposit, isRepresentative, status, notes, createdAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?)
-    `).run(
-      room3Id,
-      'Nguyễn Mỹ Trân',
-      '0829506597',
-      '0829506597',
-      '094308002875',
-      '2021-05-10',
-      'Cục Cảnh sát QLHC về TTXH',
-      '/uploads/cccd/sample_cccd_front.svg',
-      '/uploads/cccd/sample_cccd_back.svg',
-      'Sóc Trăng',
-      '2026-10-30',
-      1500000,
-      1,
-      'Khách thuê đại diện phòng số 3',
-      now
-    );
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
 
-    // Seed November 2026 Invoices for 6 rooms
-    const allRooms = db.prepare('SELECT * FROM rooms ORDER BY id ASC').all();
+    insertTenant.run(1, 1, 'Trần Như Huỳnh', '086308001527', '086308001527', '086308001527', '2023-03-09', 'Cục Cảnh sát QLHC về TTXH', '/uploads/cccd/sample_cccd_front.svg', '/uploads/cccd/sample_cccd_back.svg', '2008-02-23', 'Nữ', 'Vĩnh Long', '', '2026-09-13', 1500000, 1, 'ACTIVE', 'Người đại diện phòng số 1', now);
+    insertTenant.run(2, 1, 'Trần Thị Ngọc Huyền', '086308004370', '086308004370', '086308004370', '2022-07-29', 'Cục Cảnh sát QLHC về TTXH', '/uploads/cccd/sample_cccd_front.svg', '/uploads/cccd/sample_cccd_back.svg', '', 'Nữ', 'Vĩnh Long', '', '2026-09-13', 1500000, 0, 'ACTIVE', 'Ở cùng phòng số 1', now);
+    insertTenant.run(3, 2, 'Phạm Ngọc Ý', '0788738250', '0788738250', '093307006748', '2022-05-11', 'Cục Cảnh sát QLHC về TTXH', '/uploads/cccd/sample_cccd_front.svg', '/uploads/cccd/sample_cccd_back.svg', '2007-10-16', 'Nữ', 'Hậu Giang', '', '2026-09-13', 1500000, 1, 'ACTIVE', 'Khách thuê đại diện phòng số 2', now);
+    insertTenant.run(4, 3, 'Nguyễn Mỹ Trân', '0829506597', '0829506597', '094308002875', '2021-05-10', 'Cục Cảnh sát QLHC về TTXH', '/uploads/cccd/sample_cccd_front.svg', '/uploads/cccd/sample_cccd_back.svg', '2008-02-14', 'Nữ', 'Sóc Trăng', '', '2026-10-30', 1500000, 1, 'ACTIVE', 'Khách thuê đại diện phòng số 3', now);
+    insertTenant.run(5, 4, 'La Nguyễn Trọng Nhân', '0778182371', '0778182371', '086205010323', '2021-12-09', 'Cục Cảnh sát QLHC về TTXH', '/uploads/cccd/sample_cccd_front.svg', '/uploads/cccd/sample_cccd_back.svg', '2005-12-16', 'Nam', 'Vĩnh Long', '', '2026-09-30', 1500000, 1, 'ACTIVE', 'Khách thuê đại diện phòng số 4', now);
+    insertTenant.run(6, 5, 'Trần Chí Thiện', '0796880319', '0796880319', '087208015345', '2023-01-21', 'Cục Cảnh sát QLHC về TTXH', '/uploads/cccd/sample_cccd_front.svg', '/uploads/cccd/sample_cccd_back.svg', '2008-04-23', 'Nam', 'Đồng Tháp', '', '2026-08-28', 1500000, 1, 'ACTIVE', 'Khách thuê đại diện phòng số 5', now);
+    insertTenant.run(7, 6, 'Nguyễn Thị Hồng Mận', '0355214800', '0355214800', '089308018794', '2022-08-04', 'Cục Cảnh sát QLHC về TTXH', '/uploads/cccd/sample_cccd_front.svg', '/uploads/cccd/sample_cccd_back.svg', '2008-02-24', 'Nữ', 'An Giang', '', '2026-08-30', 1500000, 1, 'ACTIVE', 'Khách thuê đại diện phòng số 6', now);
+
     const insertInv = db.prepare(`
       INSERT INTO invoices (
         invoiceCode, roomId, month, roomPrice,
         oldElectricity, newElectricity, electricityUsage, electricityPrice, electricityCost,
         oldWater, newWater, waterUsage, waterPrice, waterCost,
         wifiFee, extraFees, totalExtraFee, discount, totalAmount, paidAmount, remainingAmount,
-        status, dueDate, notes, createdAt, updatedAt, rentDueDate, utilityDueDate
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        status, dueDate, paidDate, notes, createdAt, updatedAt, rentDueDate, utilityDueDate
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    allRooms.forEach(r => {
-      const isP3 = r.id === room3Id;
-      const code = 'HD-202611-' + r.name.replace(/[^0-9]/g, '');
-      const rentDue = isP3 ? '2026-11-30' : '2026-11-01';
-      insertInv.run(
-        code, r.id, '2026-11', 1500000,
-        0, 0, 0, 4000, 0,
-        0, 0, 0, 12000, 0,
-        50000, JSON.stringify([{ name: 'Rác & Vệ sinh chung', amount: 30000 }]), 30000, 0,
-        1580000, 0, 1580000,
-        'UNPAID', rentDue, isP3 ? 'Tiền phòng thu ngày 30 theo HĐ, Điện nước chốt ngày 1 Tây' : 'Chưa có khách',
-        now, now, rentDue, '2026-11-01'
-      );
-    });
+    // 2026-08
+    insertInv.run('HD-202608-1', 1, '2026-08', 1500000, 0, 23, 23, 4000, 92000, 0, 1, 1, 12000, 12000, 50000, '[]', 0, 0, 1654000, 0, 1654000, 'UNPAID', '2026-08-13', null, 'Tiền phòng thu ngày 13 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-08-13', '2026-08-01');
+    insertInv.run('HD-202608-2', 2, '2026-08', 1500000, 0, 1, 1, 4000, 4000, 0, 0, 0, 12000, 0, 50000, '[]', 0, 0, 1554000, 0, 1554000, 'UNPAID', '2026-08-13', null, 'Tiền phòng thu ngày 13 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-08-13', '2026-08-01');
+    insertInv.run('HD-202608-3', 3, '2026-08', 1500000, 0, 0, 0, 4000, 0, 0, 0, 0, 12000, 0, 50000, '[]', 0, 0, 1550000, 0, 1550000, 'UNPAID', '2026-08-30', null, 'Tiền phòng thu ngày 30 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-08-30', '2026-08-01');
+    insertInv.run('HD-202608-4', 4, '2026-08', 1500000, 0, 0, 0, 4000, 0, 0, 0, 0, 12000, 0, 50000, '[]', 0, 0, 1550000, 0, 1550000, 'UNPAID', '2026-08-30', null, 'Tiền phòng thu ngày 30 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-08-30', '2026-08-01');
+    insertInv.run('HD-202608-5', 5, '2026-08', 1500000, 0, 13, 13, 4000, 52000, 0, 2, 2, 12000, 24000, 50000, '[]', 0, 0, 1626000, 0, 1626000, 'UNPAID', '2026-08-28', null, 'Tiền phòng thu ngày 28 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-08-28', '2026-08-01');
+    insertInv.run('HD-202608-6', 6, '2026-08', 1500000, 0, 24, 24, 4000, 96000, 0, 1, 1, 12000, 12000, 50000, '[]', 0, 0, 1658000, 1550000, 108000, 'PARTIAL', '2026-08-30', '2026-08-30', 'Đã thu 1.550.000 đ tiền phòng ngày 30/08/2026. Ghi nước 19/09 (1 khối), ghi điện 20/09 (24kw).', now, now, '2026-08-30', '2026-08-01');
+
+    // 2026-09
+    insertInv.run('HD-202609-1', 1, '2026-09', 1500000, 23, 23, 0, 4000, 0, 1, 1, 0, 12000, 0, 50000, '[]', 0, 0, 1550000, 0, 1550000, 'UNPAID', '2026-09-13', null, 'Tiền phòng thu ngày 13 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-09-13', '2026-09-01');
+    insertInv.run('HD-202609-2', 2, '2026-09', 1500000, 1, 1, 0, 4000, 0, 0, 0, 0, 12000, 0, 50000, '[]', 0, 0, 1550000, 0, 1550000, 'UNPAID', '2026-09-13', null, 'Tiền phòng thu ngày 13 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-09-13', '2026-09-01');
+    insertInv.run('HD-202609-3', 3, '2026-09', 1500000, 0, 0, 0, 4000, 0, 0, 0, 0, 12000, 0, 50000, '[]', 0, 0, 1550000, 0, 1550000, 'UNPAID', '2026-09-30', null, 'Tiền phòng thu ngày 30 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-09-30', '2026-09-01');
+    insertInv.run('HD-202609-4', 4, '2026-09', 1500000, 0, 0, 0, 4000, 0, 0, 0, 0, 12000, 0, 50000, '[]', 0, 0, 1550000, 0, 1550000, 'UNPAID', '2026-09-30', null, 'Tiền phòng thu ngày 30 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-09-30', '2026-09-01');
+    insertInv.run('HD-202609-5', 5, '2026-09', 1500000, 13, 13, 0, 4000, 0, 2, 2, 0, 12000, 0, 50000, '[]', 0, 0, 1550000, 0, 1550000, 'UNPAID', '2026-09-28', null, 'Tiền phòng thu ngày 28 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-09-28', '2026-09-01');
+    insertInv.run('HD-202609-6', 6, '2026-09', 1500000, 24, 64, 40, 4000, 160000, 1, 2, 1, 12000, 12000, 50000, '[]', 0, 0, 1722000, 1550000, 172000, 'PARTIAL', '2026-09-30', '2026-09-30', 'Đã thu 1.550.000 đ tiền phòng ngày 30/09/2026. Ghi điện nước 20/10: 40kw điện, 1 khối nước.', now, now, '2026-09-30', '2026-09-01');
+
+    // 2026-10
+    insertInv.run('HD-202610-1', 1, '2026-10', 1500000, 23, 23, 0, 4000, 0, 1, 1, 0, 12000, 0, 50000, '[]', 0, 0, 1550000, 0, 1550000, 'UNPAID', '2026-10-13', null, 'Tiền phòng thu ngày 13 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-10-13', '2026-10-01');
+    insertInv.run('HD-202610-2', 2, '2026-10', 1500000, 1, 1, 0, 4000, 0, 0, 0, 0, 12000, 0, 50000, '[]', 0, 0, 1550000, 0, 1550000, 'UNPAID', '2026-10-13', null, 'Tiền phòng thu ngày 13 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-10-13', '2026-10-01');
+    insertInv.run('HD-202610-3', 3, '2026-10', 1500000, 0, 0, 0, 4000, 0, 0, 0, 0, 12000, 0, 50000, '[]', 0, 0, 1550000, 0, 1550000, 'UNPAID', '2026-10-30', null, 'Tiền phòng thu ngày 30 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-10-30', '2026-10-01');
+    insertInv.run('HD-202610-4', 4, '2026-10', 1500000, 0, 0, 0, 4000, 0, 0, 0, 0, 12000, 0, 50000, '[]', 0, 0, 1550000, 0, 1550000, 'UNPAID', '2026-10-30', null, 'Tiền phòng thu ngày 30 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-10-30', '2026-10-01');
+    insertInv.run('HD-202610-5', 5, '2026-10', 1500000, 13, 13, 0, 4000, 0, 2, 2, 0, 12000, 0, 50000, '[]', 0, 0, 1550000, 0, 1550000, 'UNPAID', '2026-10-28', null, 'Tiền phòng thu ngày 28 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-10-28', '2026-10-01');
+    insertInv.run('HD-202610-6', 6, '2026-10', 1500000, 64, 101, 37, 4000, 148000, 2, 2, 0, 12000, 0, 50000, '[]', 0, 0, 1698000, 0, 1698000, 'UNPAID', '2026-10-30', null, 'Tiền phòng kỳ 30/10. Ghi điện 01/11 sử dụng 37kw (chỉ số 64 -> 101). Nước giữ số cũ 2.', now, now, '2026-10-30', '2026-10-01');
+
+    // 2026-11
+    insertInv.run('HD-202611-1', 1, '2026-11', 1500000, 23, 23, 0, 4000, 0, 1, 1, 0, 12000, 0, 50000, '[{"name":"Rác & Vệ sinh chung","amount":30000}]', 30000, 0, 1580000, 0, 1580000, 'UNPAID', '2026-11-13', null, 'Tiền phòng thu ngày 13 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-11-13', '2026-11-01');
+    insertInv.run('HD-202611-2', 2, '2026-11', 1500000, 1, 1, 0, 4000, 0, 0, 0, 0, 12000, 0, 50000, '[{"name":"Rác & Vệ sinh chung","amount":30000}]', 30000, 0, 1580000, 0, 1580000, 'UNPAID', '2026-11-13', null, 'Tiền phòng thu ngày 13 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-11-13', '2026-11-01');
+    insertInv.run('HD-202611-3', 3, '2026-11', 1500000, 0, 0, 0, 4000, 0, 0, 0, 0, 12000, 0, 50000, '[{"name":"Rác & Vệ sinh chung","amount":30000}]', 30000, 0, 1580000, 0, 1580000, 'UNPAID', '2026-11-30', null, 'Tiền phòng thu ngày 30 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-11-30', '2026-11-01');
+    insertInv.run('HD-202611-4', 4, '2026-11', 1500000, 0, 0, 0, 4000, 0, 0, 0, 0, 12000, 0, 50000, '[{"name":"Rác & Vệ sinh chung","amount":30000}]', 30000, 0, 1580000, 0, 1580000, 'UNPAID', '2026-11-30', null, 'Tiền phòng thu ngày 30 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-11-30', '2026-11-01');
+    insertInv.run('HD-202611-5', 5, '2026-11', 1500000, 13, 13, 0, 4000, 0, 2, 2, 0, 12000, 0, 50000, '[{"name":"Rác & Vệ sinh chung","amount":30000}]', 30000, 0, 1580000, 0, 1580000, 'UNPAID', '2026-11-28', null, 'Tiền phòng thu ngày 28 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-11-28', '2026-11-01');
+    insertInv.run('HD-202611-6', 6, '2026-11', 1500000, 101, 101, 0, 4000, 0, 2, 2, 0, 12000, 0, 50000, '[{"name":"Rác & Vệ sinh chung","amount":30000}]', 30000, 0, 1580000, 0, 1580000, 'UNPAID', '2026-11-30', null, 'Tiền phòng thu ngày 30 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-11-30', '2026-11-01');
   }
 
   // Ensure extra columns exist in invoices table if older DB

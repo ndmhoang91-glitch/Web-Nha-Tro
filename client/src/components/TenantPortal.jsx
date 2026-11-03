@@ -899,7 +899,12 @@ export default function TenantPortal({
                     <div className="h-44 bg-white rounded-lg border border-slate-200 overflow-hidden flex items-center justify-center">
                       {currentTenant.idCardFrontUrl ? (
                         <a href={currentTenant.idCardFrontUrl} target="_blank" rel="noopener noreferrer">
-                          <img src={currentTenant.idCardFrontUrl} alt="Mặt trước CCCD" className="w-full h-full object-contain" />
+                          <img
+                            src={currentTenant.idCardFrontUrl}
+                            alt="Mặt trước CCCD"
+                            className="w-full h-full object-contain"
+                            onError={(e) => { e.currentTarget.src = '/uploads/cccd/sample_cccd_front.svg'; }}
+                          />
                         </a>
                       ) : (
                         <span className="text-xs text-slate-400">Chưa có ảnh</span>
@@ -912,7 +917,12 @@ export default function TenantPortal({
                     <div className="h-44 bg-white rounded-lg border border-slate-200 overflow-hidden flex items-center justify-center">
                       {currentTenant.idCardBackUrl ? (
                         <a href={currentTenant.idCardBackUrl} target="_blank" rel="noopener noreferrer">
-                          <img src={currentTenant.idCardBackUrl} alt="Mặt sau CCCD" className="w-full h-full object-contain" />
+                          <img
+                            src={currentTenant.idCardBackUrl}
+                            alt="Mặt sau CCCD"
+                            className="w-full h-full object-contain"
+                            onError={(e) => { e.currentTarget.src = '/uploads/cccd/sample_cccd_back.svg'; }}
+                          />
                         </a>
                       ) : (
                         <span className="text-xs text-slate-400">Chưa có ảnh</span>

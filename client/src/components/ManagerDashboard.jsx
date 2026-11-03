@@ -1439,7 +1439,12 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                       <div className="h-20 bg-white rounded-lg border border-slate-200 overflow-hidden flex items-center justify-center">
                         {tenant.idCardFrontUrl ? (
                           <a href={tenant.idCardFrontUrl} target="_blank" rel="noopener noreferrer">
-                            <img src={tenant.idCardFrontUrl} alt="CCCD Mặt trước" className="w-full h-full object-contain" />
+                            <img
+                              src={tenant.idCardFrontUrl}
+                              alt="CCCD Mặt trước"
+                              className="w-full h-full object-contain"
+                              onError={(e) => { e.currentTarget.src = '/uploads/cccd/sample_cccd_front.svg'; }}
+                            />
                           </a>
                         ) : (
                           <span className="text-[10px] text-slate-400">Chưa có ảnh trước</span>
@@ -1448,7 +1453,12 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                       <div className="h-20 bg-white rounded-lg border border-slate-200 overflow-hidden flex items-center justify-center">
                         {tenant.idCardBackUrl ? (
                           <a href={tenant.idCardBackUrl} target="_blank" rel="noopener noreferrer">
-                            <img src={tenant.idCardBackUrl} alt="CCCD Mặt sau" className="w-full h-full object-contain" />
+                            <img
+                              src={tenant.idCardBackUrl}
+                              alt="CCCD Mặt sau"
+                              className="w-full h-full object-contain"
+                              onError={(e) => { e.currentTarget.src = '/uploads/cccd/sample_cccd_back.svg'; }}
+                            />
                           </a>
                         ) : (
                           <span className="text-[10px] text-slate-400">Chưa có ảnh sau</span>
