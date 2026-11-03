@@ -6,7 +6,7 @@ import {
   Building, Phone, CreditCard, ChevronRight, Check, Bell, Trash2, Send,
   Edit3, Pencil, Calendar, Home, Building2, Key
 } from 'lucide-react';
-import { formatVND, generateBatchInvoices, updateSettings, deleteAnnouncement, deleteRoom, adminResetTenantPassword } from '../api';
+import { formatVND, generateBatchInvoices, updateSettings, deleteAnnouncement, deleteRoom, adminResetTenantPassword, clearAllData } from '../api';
 import confetti from 'canvas-confetti';
 
 export default function ManagerDashboard({
@@ -128,6 +128,31 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
       alert('Lỗi: ' + err.message);
     } finally {
       setSavingSettings(false);
+    }
+  };
+
+  const [clearingData, setClearingData] = useState(false);
+
+  const handleClearAllData = async () => {
+    const confirmed = window.confirm(
+      '⚠️ CẢNH BÁO QUAN TRỌNG:\n\nBạn có chắc chắn muốn XÓA SẠCH TOÀN BỘ dữ liệu mẫu (các phòng mẫu, khách thuê mẫu, hóa đơn, thông báo, chi phí) không?\n\nSau khi xóa, hệ thống sẽ đưa về trạng thái trống hoàn toàn để bạn bắt đầu tự thêm phòng và khách thuê thực tế của riêng mình.\n\nNhấn OK để xóa sạch dữ liệu mẫu!'
+    );
+    if (!confirmed) return;
+
+    setClearingData(true);
+    try {
+      const res = await clearAllData(settingsForm.managerPassword || '');
+      if (res.success) {
+        alert('✓ Đã xóa sạch toàn bộ dữ liệu mẫu! Hệ thống đang trống, bạn có thể bấm "Thêm Phòng Đầu Tiên" để bắt đầu nhập phòng thực tế.');
+        if (onRefresh) onRefresh();
+        setActiveTab('overview');
+      } else {
+        alert(res.message || 'Lỗi khi xóa dữ liệu');
+      }
+    } catch (err) {
+      alert('Lỗi kết nối máy chủ: ' + err.message);
+    } finally {
+      setClearingData(false);
     }
   };
 
@@ -1658,12 +1683,41 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
             </div>
           </div>
 
+          {/* Danger Zone: Clear Sample Data */}
+          <div className="bg-rose-50 border border-rose-200 rounded-2xl p-5 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-rose-900">
+                <Trash2 className="w-5 h-5 text-rose-600 shrink-0" />
+                <span className="font-bold text-sm">
+                  Dọn Sạch Toàn Bộ Dữ Liệu Mẫu / Đưa Hệ Thống Về Trống
+                </span>
+              </div>
+              <span className="text-[11px] text-rose-800 bg-rose-100 font-semibold px-2.5 py-0.5 rounded-full border border-rose-200 w-fit">
+                Bắt đầu tự nhập dữ liệu thực tế
+              </span>
+            </div>
+            <p className="text-xs text-rose-700 leading-relaxed">
+              Nếu bạn muốn xóa sạch toàn bộ các phòng mẫu (Phòng 101 - 203), khách thuê mẫu và các hóa đơn ban đầu để bắt đầu tự thêm phòng và khách thuê thực tế của riêng mình, hãy bấm nút dưới đây:
+            </p>
+            <div>
+              <button
+                type="button"
+                onClick={handleClearAllData}
+                disabled={clearingData}
+                className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                {clearingData ? 'Đang xóa dữ liệu...' : 'Xóa Toàn Bộ Dữ Liệu Mẫu & Bắt Đầu Nhập Mới'}
+              </button>
+            </div>
+          </div>
+
           {/* Submit */}
           <div className="flex items-center justify-end pt-2">
             <button
               type="submit"
               disabled={savingSettings}
-              className="px-6 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 transition-all"
+              className="px-6 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 transition-all cursor-pointer"
             >
               {savingSettings ? 'Đang lưu...' : 'Lưu Tất Cả Cài Đặt'}
             </button>

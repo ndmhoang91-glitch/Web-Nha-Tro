@@ -199,6 +199,44 @@ app.put('/api/settings', (req, res) => {
 });
 
 // ----------------------
+// SYSTEM RESET / CLEAR ALL DATA (XÓA TOÀN BỘ DỮ LIỆU MẪU ĐỂ NHẬP MỚI)
+// ----------------------
+app.post('/api/system/clear-all-data', (req, res) => {
+  try {
+    const { password } = req.body;
+    const settings = db.prepare('SELECT managerPassword FROM settings WHERE id = 1').get();
+    const currentAdminPass = settings?.managerPassword || 'admin123';
+
+    if (password && password !== currentAdminPass) {
+      return res.status(403).json({ success: false, message: 'Mật khẩu quản lý không chính xác' });
+    }
+
+    const clearTx = db.transaction(() => {
+      db.prepare('DELETE FROM payment_proofs').run();
+      db.prepare('DELETE FROM invoices').run();
+      db.prepare('DELETE FROM maintenance_requests').run();
+      db.prepare('DELETE FROM announcements').run();
+      db.prepare('DELETE FROM expenses').run();
+      db.prepare('DELETE FROM tenants').run();
+      db.prepare('DELETE FROM rooms').run();
+      db.prepare('DELETE FROM audit_logs').run();
+    });
+
+    clearTx();
+
+    logAudit('RESET_DỮ_LIỆU', 'Đã xóa toàn bộ dữ liệu, hệ thống đưa về trạng thái trống sẵn sàng nhập mới', 'MANAGER', 'Chủ Trọ', null);
+
+    return res.json({
+      success: true,
+      message: 'Đã xóa sạch toàn bộ dữ liệu mẫu! Hệ thống đang ở trạng thái trống, bạn có thể bắt đầu tự thêm phòng và khách thuê mới.'
+    });
+  } catch (err) {
+    console.error('Lỗi khi xóa toàn bộ dữ liệu:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi máy chủ khi xóa dữ liệu: ' + err.message });
+  }
+});
+
+// ----------------------
 // ROOMS
 // ----------------------
 app.get('/api/rooms', (req, res) => {

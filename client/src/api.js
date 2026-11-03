@@ -228,6 +228,15 @@ export async function deleteAnnouncement(id) {
   return res.json();
 }
 
+export async function clearAllData(password = '') {
+  const res = await fetch(`${API_BASE}/system/clear-all-data`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password })
+  });
+  return res.json();
+}
+
 export function formatVND(amount) {
   if (amount === undefined || amount === null) return '0 đ';
   return Number(amount).toLocaleString('vi-VN') + ' đ';
