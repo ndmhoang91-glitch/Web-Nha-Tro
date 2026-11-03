@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, ShieldCheck, UserCheck, Bell, Calendar, Sparkles, Building2, User, LogOut } from 'lucide-react';
+import { Home, ShieldCheck, UserCheck, Bell, Calendar, Sparkles, Building2, User, LogOut, RotateCw } from 'lucide-react';
 
 export default function Navbar({
   currentMonth,
@@ -13,7 +13,9 @@ export default function Navbar({
   announcementsCount = 0,
   settings = {},
   currentUser = null,
-  onLogout
+  onLogout,
+  onRefresh,
+  refreshing = false
 }) {
   // Generate list of recent months for selector
   const getMonthOptions = () => {
@@ -56,8 +58,24 @@ export default function Navbar({
           </div>
 
           {/* Month Selector & Controls */}
-          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             
+            {/* Quick Refresh Button (Làm Mới Tiện Lợi Cho Di Động) */}
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={refreshing}
+              className={`flex items-center gap-1 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl text-xs font-bold transition-all border shadow-2xs cursor-pointer ${
+                refreshing
+                  ? 'bg-blue-50 border-blue-300 text-blue-700'
+                  : 'bg-white hover:bg-slate-50 active:bg-blue-50 text-slate-700 hover:text-blue-600 border-slate-200'
+              }`}
+              title="Nhấn để cập nhật lại dữ liệu ngay lập tức"
+            >
+              <RotateCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600 ${refreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{refreshing ? 'Đang tải...' : 'Làm Mới'}</span>
+            </button>
+
             {/* Month Picker */}
             <div className="flex items-center bg-slate-100/90 rounded-xl p-1 border border-slate-200">
               <Calendar className="w-4 h-4 text-slate-500 ml-2 hidden sm:block" />

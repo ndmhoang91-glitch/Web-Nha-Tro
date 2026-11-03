@@ -50,6 +50,7 @@ export default function App() {
   const [statistics, setStatistics] = useState({});
   const [auditLogs, setAuditLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Modals
   const [activeInvoiceModal, setActiveInvoiceModal] = useState(null);
@@ -61,7 +62,8 @@ export default function App() {
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
 
   // Fetch all data
-  const loadAllData = useCallback(async () => {
+  const loadAllData = useCallback(async (silent = false) => {
+    if (!silent) setRefreshing(true);
     try {
       const [
         st,
@@ -98,11 +100,42 @@ export default function App() {
       console.error('Failed to load application data:', err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [currentMonth]);
 
   useEffect(() => {
     loadAllData();
+  }, [loadAllData]);
+
+  // 1. Auto-refresh on Tab Visibility & Focus (Tự động tải lại khi quay lại app trên di động)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadAllData(true);
+      }
+    };
+    const handleFocus = () => {
+      loadAllData(true);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [loadAllData]);
+
+  // 2. Periodic background auto-refresh every 15 seconds (Tự động làm mới định kỳ mỗi 15 giây)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadAllData(true);
+      }
+    }, 15000);
+
+    return () => clearInterval(interval);
   }, [loadAllData]);
 
   // Dynamically update browser tab title to match landlord's houseName
@@ -171,6 +204,8 @@ export default function App() {
         settings={settings}
         currentUser={currentUser}
         onLogout={handleLogout}
+        onRefresh={() => loadAllData(false)}
+        refreshing={refreshing}
       />
 
       {/* Main Content Area */}
