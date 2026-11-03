@@ -9,6 +9,7 @@ import TenantModal from './components/TenantModal';
 import ExpenseModal from './components/ExpenseModal';
 import AnnouncementModal from './components/AnnouncementModal';
 import RoomModal from './components/RoomModal';
+import LoginModal from './components/LoginModal';
 import {
   fetchSettings,
   fetchRooms,
@@ -23,10 +24,20 @@ import {
 import './App.css';
 
 export default function App() {
+  // Current logged in user: null | { role: 'MANAGER'|'TENANT', name, phone, roomId, roomName }
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('web_nha_tro_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
   // Current month e.g. '2026-11'
   const [currentMonth, setCurrentMonth] = useState('2026-11');
-  const [role, setRole] = useState('MANAGER'); // 'MANAGER' | 'TENANT'
-  const [selectedRoomId, setSelectedRoomId] = useState(1);
+  const [role, setRole] = useState(currentUser?.role === 'TENANT' ? 'TENANT' : 'MANAGER');
+  const [selectedRoomId, setSelectedRoomId] = useState(currentUser?.roomId || 1);
 
   // Core Data
   const [settings, setSettings] = useState({});
@@ -94,18 +105,49 @@ export default function App() {
     loadAllData();
   }, [loadAllData]);
 
-  // Keep selected room valid
+  // Keep selected room valid and adhere to tenant room lock
   useEffect(() => {
-    if (rooms.length > 0 && !rooms.some(r => r.id === selectedRoomId)) {
+    if (currentUser?.role === 'TENANT' && currentUser.roomId) {
+      setSelectedRoomId(currentUser.roomId);
+      setRole('TENANT');
+    } else if (rooms.length > 0 && !rooms.some(r => r.id === selectedRoomId)) {
       setSelectedRoomId(rooms[0].id);
     }
-  }, [rooms, selectedRoomId]);
+  }, [rooms, selectedRoomId, currentUser]);
+
+  const handleLoginSuccess = (user) => {
+    setCurrentUser(user);
+    try {
+      localStorage.setItem('web_nha_tro_user', JSON.stringify(user));
+    } catch (e) {}
+    if (user.role === 'TENANT') {
+      setRole('TENANT');
+      setSelectedRoomId(user.roomId);
+    } else {
+      setRole('MANAGER');
+    }
+  };
+
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem('web_nha_tro_user');
+    } catch (e) {}
+    setCurrentUser(null);
+  };
 
   const pendingProofsCount = proofs.filter(p => p.status === 'PENDING').length;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans">
       
+      {/* If not logged in, prompt Login Screen */}
+      {!currentUser && (
+        <LoginModal
+          settings={settings}
+          onLoginSuccess={handleLoginSuccess}
+        />
+      )}
+
       {/* Navigation Header */}
       <Navbar
         currentMonth={currentMonth}
@@ -118,6 +160,8 @@ export default function App() {
         pendingProofsCount={pendingProofsCount}
         announcementsCount={announcements.length}
         settings={settings}
+        currentUser={currentUser}
+        onLogout={handleLogout}
       />
 
       {/* Main Content Area */}
@@ -161,6 +205,7 @@ export default function App() {
                 announcements={announcements}
                 settings={settings}
                 currentMonth={currentMonth}
+                currentUser={currentUser}
                 onRefresh={loadAllData}
                 onOpenInvoiceModal={(inv) => setActiveInvoiceModal(inv)}
               />

@@ -17,6 +17,7 @@ export default function TenantPortal({
   announcements = [],
   settings = {},
   currentMonth,
+  currentUser = null,
   onRefresh,
   onOpenInvoiceModal
 }) {
@@ -189,21 +190,23 @@ export default function TenantPortal({
             </div>
           </div>
 
-          {/* Quick Room Switcher */}
-          <div className="bg-white/10 backdrop-blur-md p-2 rounded-2xl border border-white/20 shrink-0">
-            <label className="text-[11px] text-emerald-200 block mb-1 font-semibold">Đổi phòng xem thử:</label>
-            <select
-              value={selectedRoomId || currentRoom?.id}
-              onChange={e => setSelectedRoomId(Number(e.target.value))}
-              className="bg-emerald-950 text-white font-bold text-xs px-3 py-1.5 rounded-xl border border-emerald-700 outline-hidden cursor-pointer"
-            >
-              {rooms.map(r => (
-                <option key={r.id} value={r.id}>
-                  {r.name} {r.representativeName ? `(${r.representativeName})` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Quick Room Switcher (Only visible to Landlord Manager when previewing!) */}
+          {currentUser?.role === 'MANAGER' && (
+            <div className="bg-white/10 backdrop-blur-md p-2 rounded-2xl border border-white/20 shrink-0">
+              <label className="text-[11px] text-emerald-200 block mb-1 font-semibold">Xem thử phòng khác:</label>
+              <select
+                value={selectedRoomId || currentRoom?.id}
+                onChange={e => setSelectedRoomId(Number(e.target.value))}
+                className="bg-emerald-950 text-white font-bold text-xs px-3 py-1.5 rounded-xl border border-emerald-700 outline-hidden cursor-pointer"
+              >
+                {rooms.map(r => (
+                  <option key={r.id} value={r.id}>
+                    {r.name} {r.representativeName ? `(${r.representativeName})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Sub Navigation Bar */}
