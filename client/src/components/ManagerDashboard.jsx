@@ -464,9 +464,10 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                   const inv = invoices.find(i => Number(i.roomId) === Number(room.id));
                   const tenant = tenants.find(t => Number(t.roomId) === Number(room.id) && t.isRepresentative && t.status === 'ACTIVE') 
                     || tenants.find(t => Number(t.roomId) === Number(room.id) && t.status === 'ACTIVE');
-                  const isOccupied = Boolean(tenant) || Number(room.tenantCount) > 0;
+                  const tenantInMonth = tenant && (!currentMonth || !tenant.startDate || tenant.startDate.slice(0, 7) <= currentMonth) ? tenant : null;
+                  const isOccupied = Boolean(tenantInMonth);
                   const schedule = inv?.schedule;
-                  const rentDay = schedule?.actualRentDay || (tenant?.startDate ? new Date(tenant.startDate).getDate() : 1);
+                  const rentDay = schedule?.actualRentDay || (tenantInMonth?.startDate ? new Date(tenantInMonth.startDate).getDate() : 1);
                   const rentCycleStr = schedule?.rentCycleStr || `Ngày ${rentDay} tháng này ➔ Ngày ${rentDay} tháng sau`;
                   const isPaid = inv?.status === 'PAID';
                   const isPending = inv?.status === 'PENDING_APPROVAL';
@@ -659,7 +660,8 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                 const inv = invoices.find(i => Number(i.roomId) === Number(room.id));
                 const tenant = tenants.find(t => Number(t.roomId) === Number(room.id) && t.isRepresentative && t.status === 'ACTIVE') 
                   || tenants.find(t => Number(t.roomId) === Number(room.id) && t.status === 'ACTIVE');
-                const isOccupied = Boolean(tenant) || Number(room.tenantCount) > 0;
+                const tenantInMonth = tenant && (!currentMonth || !tenant.startDate || tenant.startDate.slice(0, 7) <= currentMonth) ? tenant : null;
+                const isOccupied = Boolean(tenantInMonth);
 
                 return (
                   <div
@@ -714,15 +716,15 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                           <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                             <div>
                               <div className="font-bold text-slate-800 text-sm">
-                                {tenant?.fullName || room.representativeName || 'Chưa có thông tin'}
+                                {tenantInMonth?.fullName || 'Chưa có thông tin'}
                               </div>
                               <div className="text-slate-500 text-[11px] flex items-center gap-1 mt-0.5">
                                 <Phone className="w-3 h-3 text-slate-400" />
-                                <span>{tenant?.phone || room.representativePhone || '---'}</span>
+                                <span>{tenantInMonth?.phone || '---'}</span>
                               </div>
                             </div>
                             <span className="text-[11px] text-blue-700 bg-blue-50 px-2 py-1 rounded-lg font-semibold">
-                              {room.tenantCount || 1} người ở
+                              1 người ở
                             </span>
                           </div>
 
@@ -746,8 +748,7 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
 
                           {/* Billing Schedule Summary Badge */}
                           {(() => {
-                            const tenant = tenants.find(t => t.roomId === room.id && t.isRepresentative && t.status === 'ACTIVE') || tenants.find(t => t.roomId === room.id && t.status === 'ACTIVE');
-                            const rentDay = inv?.schedule?.actualRentDay || (tenant?.startDate ? new Date(tenant.startDate).getDate() : 1);
+                            const rentDay = inv?.schedule?.actualRentDay || (tenantInMonth?.startDate ? new Date(tenantInMonth.startDate).getDate() : 1);
                             return (
                               <div className="bg-blue-50/70 border border-blue-100 rounded-xl p-2 text-[11px] space-y-1">
                                 <div className="flex items-center justify-between text-blue-900">

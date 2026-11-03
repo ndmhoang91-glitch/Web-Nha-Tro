@@ -973,6 +973,11 @@ app.post('/api/invoices/generate-batch', (req, res) => {
     // Lookup active tenant start date to compute contract day
     const tenant = db.prepare("SELECT * FROM tenants WHERE roomId = ? AND isRepresentative = 1 AND status = 'ACTIVE' LIMIT 1").get(room.id)
       || db.prepare("SELECT * FROM tenants WHERE roomId = ? AND status = 'ACTIVE' LIMIT 1").get(room.id);
+
+    // Skip room if it had no active tenant, or tenant contract started AFTER this month!
+    if (!tenant) return;
+    if (tenant.startDate && tenant.startDate.slice(0, 7) > month) return;
+
     const schedule = computeBillingSchedule(month, tenant?.startDate);
 
     const oldElectricity = prevInvoice ? prevInvoice.newElectricity : 0;
@@ -1339,9 +1344,13 @@ app.delete('/api/expenses/:id', (req, res) => {
 app.get('/api/statistics', (req, res) => {
   const month = req.query.month || new Date().toISOString().slice(0, 7);
 
-  // Total rooms and occupied (synced with actual active tenants)
+  // Total rooms and occupied (synced with actual active tenants in this month)
   const totalRooms = db.prepare('SELECT COUNT(*) as c FROM rooms').get().c;
-  const occupiedRooms = db.prepare("SELECT COUNT(DISTINCT roomId) as c FROM tenants WHERE status = 'ACTIVE'").get().c;
+  const occupiedRooms = db.prepare(`
+    SELECT COUNT(DISTINCT roomId) as c
+    FROM tenants
+    WHERE status = 'ACTIVE' AND (startDate IS NULL OR strftime('%Y-%m', startDate) <= ?)
+  `).get(month).c;
 
   // Invoices for this month
   const invStats = db.prepare(`
