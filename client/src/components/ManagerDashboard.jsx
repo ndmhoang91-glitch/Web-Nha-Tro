@@ -4,9 +4,9 @@ import {
   Plus, Sparkles, CheckCircle2, Clock, AlertTriangle, Zap, Droplet, Wifi,
   Printer, Copy, Search, ArrowUpRight, ArrowDownRight, DollarSign, Eye,
   Building, Phone, CreditCard, ChevronRight, Check, Bell, Trash2, Send,
-  Edit3, Pencil, Calendar, Home, Building2
+  Edit3, Pencil, Calendar, Home, Building2, Key
 } from 'lucide-react';
-import { formatVND, generateBatchInvoices, updateSettings, deleteAnnouncement, deleteRoom } from '../api';
+import { formatVND, generateBatchInvoices, updateSettings, deleteAnnouncement, deleteRoom, adminResetTenantPassword } from '../api';
 import confetti from 'canvas-confetti';
 
 export default function ManagerDashboard({
@@ -65,6 +65,21 @@ Mọi người chú ý chuẩn bị nhé. Cảm ơn quý khách!`;
     try {
       await deleteAnnouncement(id);
       if (onRefresh) onRefresh();
+    } catch (err) {
+      alert('Lỗi: ' + err.message);
+    }
+  };
+
+  const handleResetTenantPassword = async (tenant) => {
+    if (!confirm(`Xác nhận đặt lại mật khẩu cho khách "${tenant.fullName}" (Phòng ${tenant.roomName}) về mặc định là: 123?`)) return;
+    try {
+      const res = await adminResetTenantPassword(tenant.id, '123');
+      if (res && res.success) {
+        alert(`✓ Đã đặt lại mật khẩu cho ${tenant.fullName} thành công!\nMật khẩu mới là: 123`);
+        if (onRefresh) onRefresh();
+      } else {
+        alert(res?.message || 'Có lỗi khi đặt lại mật khẩu');
+      }
     } catch (err) {
       alert('Lỗi: ' + err.message);
     }
@@ -1335,16 +1350,31 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                   </div>
                 </div>
 
-                {/* Edit Button */}
-                <div className="pt-3 mt-4 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-[10px] text-slate-400">Vào ở: {tenant.startDate || '---'}</span>
-                  <button
-                    type="button"
-                    onClick={() => onOpenTenantModal(tenant)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700"
-                  >
-                    Sửa Thông Tin & CCCD
-                  </button>
+                {/* Action Buttons */}
+                <div className="pt-3 mt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-[11px] text-slate-500 flex items-center gap-2">
+                    <span>Vào ở: <strong className="font-mono">{tenant.startDate || '---'}</strong></span>
+                    <span>•</span>
+                    <span>MK: <strong className="font-mono bg-slate-100 text-blue-700 px-1.5 py-0.5 rounded border border-slate-200">{tenant.password || '123'}</strong></span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleResetTenantPassword(tenant)}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1 cursor-pointer transition-colors"
+                      title="Đặt lại mật khẩu cho khách về 123"
+                    >
+                      <Key className="w-3 h-3 text-amber-600" />
+                      <span>Reset MK (123)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onOpenTenantModal(tenant)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer transition-colors"
+                    >
+                      Sửa Thông Tin & CCCD
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -1589,6 +1619,41 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                   className="w-full px-3 py-2 bg-white border border-emerald-200 rounded-xl font-bold uppercase"
                   required
                 />
+              </div>
+            </div>
+          </div>
+
+          {/* Admin Security & Password */}
+          <div className="bg-slate-900 text-white p-5 rounded-2xl border border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Key className="w-5 h-5 text-amber-400" />
+                <span className="font-bold text-sm">
+                  Mật Khẩu Quản Trị Chủ Trọ (Admin)
+                </span>
+              </div>
+              <span className="text-[11px] text-amber-300 bg-amber-400/20 px-2.5 py-0.5 rounded-full border border-amber-400/30 font-semibold">
+                Bảo vệ toàn bộ hệ thống
+              </span>
+            </div>
+            <p className="text-xs text-slate-300">
+              Mật khẩu này dùng để đăng nhập vào trang Quản Lý. Bạn có thể thay đổi bất kỳ lúc nào để đảm bảo bảo mật.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
+              <div>
+                <label className="text-slate-300 font-semibold block mb-1">Mật khẩu quản trị mới</label>
+                <input
+                  type="text"
+                  placeholder="Nhập mật khẩu quản trị mới..."
+                  value={settingsForm.managerPassword || ''}
+                  onChange={e => setSettingsForm({ ...settingsForm, managerPassword: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-white font-mono focus:border-amber-400 focus:outline-hidden"
+                />
+              </div>
+              <div className="flex items-center">
+                <span className="text-[11px] text-slate-400">
+                  Mật khẩu mặc định: <strong className="text-white font-mono">admin123</strong>. Sau khi đổi và bấm <strong>"Lưu Tất Cả Cài Đặt"</strong>, mật khẩu mới sẽ có hiệu lực ngay lập tức.
+                </span>
               </div>
             </div>
           </div>

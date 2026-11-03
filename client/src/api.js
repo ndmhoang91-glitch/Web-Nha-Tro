@@ -9,6 +9,24 @@ export async function loginUser(credentials) {
   return res.json();
 }
 
+export async function resetTenantPassword(data) {
+  const res = await fetch(`${API_BASE}/auth/reset-tenant-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  return res.json();
+}
+
+export async function adminResetTenantPassword(tenantId, newPassword = '123') {
+  const res = await fetch(`${API_BASE}/tenants/${tenantId}/reset-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ newPassword })
+  });
+  return res.json();
+}
+
 export async function fetchSettings() {
   const res = await fetch(`${API_BASE}/settings`);
   return res.json();

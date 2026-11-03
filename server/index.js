@@ -116,6 +116,54 @@ app.post('/api/auth/login', (req, res) => {
   });
 });
 
+// Tenant Self-Service Password Reset via CCCD verification
+app.post('/api/auth/reset-tenant-password', (req, res) => {
+  try {
+    const { phone, idCardNumber, newPassword } = req.body;
+    if (!phone || !idCardNumber || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Vui lòng điền đủ Số điện thoại, Số CCCD và Mật khẩu mới' });
+    }
+
+    const cleanPhone = phone.trim();
+    const cleanIdCard = idCardNumber.trim().replace(/\s/g, '');
+
+    const tenant = db.prepare(`
+      SELECT t.*, r.name as roomName
+      FROM tenants t
+      JOIN rooms r ON t.roomId = r.id
+      WHERE t.phone = ? AND t.status = 'ACTIVE'
+    `).get(cleanPhone);
+
+    if (!tenant) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy khách thuê với số điện thoại này' });
+    }
+
+    const dbIdCard = (tenant.idCardNumber || '').trim().replace(/\s/g, '');
+    if (!dbIdCard || dbIdCard !== cleanIdCard) {
+      return res.status(400).json({ success: false, message: 'Số CCCD không khớp với hồ sơ hợp đồng đã đăng ký' });
+    }
+
+    db.prepare('UPDATE tenants SET password = ? WHERE id = ?').run(newPassword.trim(), tenant.id);
+    logAudit('ĐẶT_LẠI_MẬT_KHẨU', `Khách ${tenant.fullName} tự đặt lại mật khẩu thành công qua CCCD`, 'TENANT', tenant.fullName, tenant.roomId);
+
+    return res.json({
+      success: true,
+      message: 'Đặt lại mật khẩu thành công! Bạn có thể đăng nhập ngay.',
+      user: {
+        role: 'TENANT',
+        id: tenant.id,
+        roomId: tenant.roomId,
+        roomName: tenant.roomName,
+        name: tenant.fullName,
+        phone: tenant.phone
+      }
+    });
+  } catch (err) {
+    console.error('Lỗi reset mật khẩu khách:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi máy chủ: ' + err.message });
+  }
+});
+
 // ----------------------
 // SETTINGS
 // ----------------------
@@ -417,6 +465,23 @@ app.delete('/api/tenants/:id', (req, res) => {
     logAudit('XÓA_KHÁCH_TRỌ', `Xóa khách ${tenant.fullName} khỏi phòng`, 'MANAGER', 'Chủ Trọ', tenant.roomId);
   }
   res.json({ success: true });
+});
+
+// Admin 1-Click Reset Password for Tenant
+app.post('/api/tenants/:id/reset-password', (req, res) => {
+  try {
+    const tenantId = req.params.id;
+    const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(tenantId);
+    if (!tenant) return res.status(404).json({ success: false, message: 'Không tìm thấy khách thuê' });
+
+    const newPass = req.body.newPassword ? String(req.body.newPassword).trim() : '123';
+    db.prepare('UPDATE tenants SET password = ? WHERE id = ?').run(newPass, tenantId);
+
+    logAudit('RESET_MẬT_KHẨU', `Chủ trọ đặt lại mật khẩu cho ${tenant.fullName} về: ${newPass}`, 'MANAGER', 'Chủ Trọ', tenant.roomId);
+    res.json({ success: true, message: `Đã đặt lại mật khẩu cho ${tenant.fullName} về mặc định (${newPass}) thành công!` });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 // ----------------------
