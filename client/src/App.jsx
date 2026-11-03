@@ -105,6 +105,15 @@ export default function App() {
     loadAllData();
   }, [loadAllData]);
 
+  // Dynamically update browser tab title to match landlord's houseName
+  useEffect(() => {
+    if (settings?.houseName && settings.houseName.trim()) {
+      document.title = `${settings.houseName.trim()} - Quản Lý Nhà Trọ`;
+    } else {
+      document.title = 'Quản Lý Nhà Trọ';
+    }
+  }, [settings?.houseName]);
+
   // Keep selected room valid and adhere to tenant room lock
   useEffect(() => {
     if (currentUser?.role === 'TENANT' && currentUser.roomId) {

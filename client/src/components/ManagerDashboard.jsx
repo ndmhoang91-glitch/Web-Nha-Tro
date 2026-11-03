@@ -627,22 +627,20 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                         </div>
 
                         {/* Status Badge */}
-                        {isOccupied ? (
-                          inv ? (
-                            <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
-                              inv.status === 'PAID'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : inv.status === 'PENDING_APPROVAL'
-                                ? 'bg-amber-100 text-amber-900 animate-pulse'
-                                : 'bg-rose-100 text-rose-800'
-                            }`}>
-                              {inv.status === 'PAID' ? '✓ Đã thanh toán' : inv.status === 'PENDING_APPROVAL' ? '⏳ Chờ duyệt bill' : '⚠️ Chưa đóng tiền'}
-                            </span>
-                          ) : (
-                            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                              Chưa có HĐ
-                            </span>
-                          )
+                        {inv ? (
+                          <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
+                            inv.status === 'PAID'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : inv.status === 'PENDING_APPROVAL'
+                              ? 'bg-amber-100 text-amber-900 animate-pulse'
+                              : 'bg-rose-100 text-rose-800'
+                          }`}>
+                            {inv.status === 'PAID' ? '✓ Đã thanh toán' : inv.status === 'PENDING_APPROVAL' ? '⏳ Chờ duyệt bill' : '⚠️ Chưa đóng tiền'}
+                          </span>
+                        ) : isOccupied ? (
+                          <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                            Chưa có HĐ
+                          </span>
                         ) : (
                           <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600">
                             Phòng trống
@@ -721,18 +719,33 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                           {room.description && (
                             <p className="text-[11px] text-slate-500 italic line-clamp-2">{room.description}</p>
                           )}
+                          
+                          {/* Utilities breakdown snippet if invoice generated for empty room */}
+                          {inv ? (
+                            <div className="grid grid-cols-2 gap-2 text-[11px] bg-white p-2 rounded-xl border border-slate-200 text-left">
+                              <div className="flex items-center gap-1.5 text-amber-800">
+                                <Zap className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                <span>Điện: <strong>{inv.electricityUsage} kWh</strong></span>
+                              </div>
+                              <div className="flex items-center gap-1.5 text-cyan-800">
+                                <Droplet className="w-3.5 h-3.5 text-cyan-600 shrink-0" />
+                                <span>Nước: <strong>{inv.waterUsage} m³</strong></span>
+                              </div>
+                            </div>
+                          ) : null}
+
                           <div className="flex items-center justify-center gap-2 pt-1">
                             <button
                               type="button"
                               onClick={() => onOpenTenantModal({ roomId: room.id })}
-                              className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 shadow-2xs"
+                              className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 shadow-2xs cursor-pointer"
                             >
                               Xếp Khách Vào Phòng
                             </button>
                             <button
                               type="button"
                               onClick={() => onOpenRoomModal(room)}
-                              className="px-2.5 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-100 shadow-2xs flex items-center gap-1"
+                              className="px-2.5 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-100 shadow-2xs flex items-center gap-1 cursor-pointer"
                               title="Sửa thông tin hoặc xóa phòng này"
                             >
                               <Pencil className="w-3 h-3 text-blue-600" /> Sửa / Xóa
@@ -753,12 +766,12 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                     </div>
 
                     {/* Action Buttons for Room */}
-                    {isOccupied && inv && (
+                    {inv ? (
                       <div className="grid grid-cols-4 gap-1 pt-2 border-t border-slate-100">
                         <button
                           type="button"
                           onClick={() => onOpenMeterModal(inv)}
-                          className="flex items-center justify-center gap-1 px-1.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-semibold transition-colors"
+                          className="flex items-center justify-center gap-1 px-1.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer"
                           title="Ghi chỉ số điện nước"
                         >
                           <Zap className="w-3 h-3 text-amber-600" /> Điện
@@ -767,7 +780,7 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                         <button
                           type="button"
                           onClick={() => onOpenInvoiceModal(inv)}
-                          className="flex items-center justify-center gap-1 px-1.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-[11px] font-semibold transition-colors"
+                          className="flex items-center justify-center gap-1 px-1.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer"
                           title="Xem chi tiết hóa đơn & in"
                         >
                           <Eye className="w-3 h-3" /> HĐ
@@ -776,7 +789,7 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                         <button
                           type="button"
                           onClick={() => handleCopyZaloSingle(inv)}
-                          className={`flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${
+                          className={`flex items-center justify-center gap-1 px-1.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer ${
                             copiedZaloId === inv.id
                               ? 'bg-emerald-600 text-white'
                               : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
@@ -790,10 +803,20 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                         <button
                           type="button"
                           onClick={() => onOpenRoomModal(room)}
-                          className="flex items-center justify-center gap-1 px-1.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-blue-600 rounded-lg text-[11px] font-semibold transition-colors"
+                          className="flex items-center justify-center gap-1 px-1.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-blue-600 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer"
                           title="Sửa thông tin hoặc xóa phòng này"
                         >
                           <Pencil className="w-3 h-3" /> Sửa
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => onOpenTenantModal({ roomId: room.id })}
+                          className="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold text-center cursor-pointer transition-colors"
+                        >
+                          + Xếp Khách Vào Phòng
                         </button>
                       </div>
                     )}

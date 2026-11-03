@@ -72,6 +72,198 @@ Cảm ơn anh/chị!`;
     }
   };
 
+  const handlePrintWindow = () => {
+    const printWindow = window.open('', '_blank', 'width=850,height=950');
+    if (!printWindow) {
+      window.print();
+      return;
+    }
+
+    const rentDay = invoice.rentDueDay || (invoice.schedule?.actualRentDay) || 1;
+    const rentCycleStr = invoice.rentCycleStr || (invoice.schedule?.rentCycleStr) || '1 tháng';
+
+    const extraFeesRows = (invoice.extraFees || []).map((f, i) => `
+      <tr>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1;">5.${i + 1}. ${f.name}</td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center; color: #94a3b8;">---</td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center;">Cố định</td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right;">${formatVND(f.amount)}</td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right; font-weight: bold;">${formatVND(f.amount)}</td>
+      </tr>
+    `).join('');
+
+    const discountRow = invoice.discount > 0 ? `
+      <tr style="color: #15803d; background: #f0fdf4;">
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1;">Giảm trừ / Khuyến mãi</td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center;">---</td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center;">---</td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right;">-${formatVND(invoice.discount)}</td>
+        <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right; font-weight: bold;">-${formatVND(invoice.discount)}</td>
+      </tr>
+    ` : '';
+
+    const paidRow = invoice.paidAmount > 0 ? `
+      <tr style="background: #f8fafc;">
+        <td colspan="4" style="padding: 8px; text-align: right; font-weight: bold; color: #16a34a; border: 1px solid #cbd5e1;">Đã thanh toán:</td>
+        <td style="padding: 8px; text-align: right; font-weight: bold; color: #16a34a; border: 1px solid #cbd5e1;">${formatVND(invoice.paidAmount)}</td>
+      </tr>
+    ` : '';
+
+    const remainingRow = (invoice.remainingAmount > 0 && invoice.paidAmount > 0) ? `
+      <tr style="background: #fff1f2;">
+        <td colspan="4" style="padding: 8px; text-align: right; font-weight: bold; color: #e11d48; border: 1px solid #cbd5e1;">Còn nợ lại:</td>
+        <td style="padding: 8px; text-align: right; font-weight: bold; color: #e11d48; border: 1px solid #cbd5e1;">${formatVND(invoice.remainingAmount)}</td>
+      </tr>
+    ` : '';
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Hóa Đơn ${invoice.invoiceCode || ''} - ${invoice.roomName || ''}</title>
+        <style>
+          @page { size: A4 portrait; margin: 12mm; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color: #0f172a; margin: 0; padding: 20px; font-size: 13px; line-height: 1.5; }
+          .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px dashed #94a3b8; padding-bottom: 12px; margin-bottom: 15px; }
+          .title { font-size: 20px; font-weight: 800; color: #0f172a; margin: 0 0 4px; text-transform: uppercase; }
+          .subtitle { font-size: 12px; color: #475569; margin: 2px 0; }
+          .badge { display: inline-block; padding: 4px 10px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; font-family: monospace; font-size: 13px; font-weight: bold; }
+          .info-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+          th { background: #f1f5f9; border: 1px solid #cbd5e1; padding: 10px 8px; text-align: left; font-size: 12px; font-weight: bold; color: #334155; }
+          .total-row { background: #0f172a; color: #ffffff; font-weight: bold; }
+          .total-row td { border: 1px solid #0f172a; color: #ffffff; }
+          .qr-section { display: flex; align-items: center; gap: 15px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px; margin-bottom: 20px; }
+          .qr-img { width: 110px; height: 110px; object-fit: contain; background: white; padding: 4px; border-radius: 6px; border: 1px solid #dbeafe; }
+          .signatures { display: grid; grid-template-columns: 1fr 1fr; text-align: center; margin-top: 25px; page-break-inside: avoid; }
+          .stamp { border: 2px solid #16a34a; color: #16a34a; font-weight: 800; font-size: 13px; display: inline-block; padding: 4px 12px; transform: rotate(-5deg); border-radius: 4px; }
+          @media print {
+            body { padding: 0; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div>
+            <h1 class="title">${settings.houseName || 'HỆ THỐNG NHÀ TRỌ'}</h1>
+            <p class="subtitle">Địa chỉ: <strong>${settings.address || ''}</strong></p>
+            <p class="subtitle">Chủ trọ: <strong>${settings.landlordName || ''}</strong> - Hotline: <strong>${settings.landlordPhone || ''}</strong></p>
+          </div>
+          <div style="text-align: right;">
+            <div class="badge">${invoice.invoiceCode || ''}</div>
+            <p class="subtitle" style="margin-top: 6px;">Kỳ thu: <strong>Tháng ${invoice.month?.slice(5)}/${invoice.month?.slice(0, 4)}</strong></p>
+          </div>
+        </div>
+
+        <div class="info-box">
+          <div>Phòng thuê: <strong style="font-size: 14px; color: #0284c7;">${invoice.roomName || ''}</strong></div>
+          <div>Đại diện phòng: <strong>${invoice.tenantName || 'Khách thuê'}</strong></div>
+          <div>Số điện thoại: <strong>${invoice.tenantPhone || '---'}</strong></div>
+          <div>Hạn thu tiền phòng: <strong>Ngày ${rentDay} hàng tháng (${rentCycleStr})</strong></div>
+          <div>Hạn thu điện nước: <strong>Ngày 1 Tây hàng tháng</strong></div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Khoản mục</th>
+              <th style="text-align: center; border: 1px solid #cbd5e1; padding: 10px 8px;">Số cũ ➔ mới</th>
+              <th style="text-align: center; border: 1px solid #cbd5e1; padding: 10px 8px;">Tiêu thụ</th>
+              <th style="text-align: right; border: 1px solid #cbd5e1; padding: 10px 8px;">Đơn giá</th>
+              <th style="text-align: right; border: 1px solid #cbd5e1; padding: 10px 8px;">Thành tiền</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding: 9px 8px; border: 1px solid #cbd5e1;">
+                <div style="font-weight: bold;">1. Tiền thuê phòng</div>
+                <div style="font-size: 11px; color: #0284c7;">Kỳ: ${rentCycleStr} (Thu đúng ngày ${rentDay} hàng tháng)</div>
+              </td>
+              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center; color: #94a3b8;">---</td>
+              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center;">1 tháng</td>
+              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right;">${formatVND(invoice.roomPrice)}</td>
+              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right; font-weight: bold;">${formatVND(invoice.roomPrice)}</td>
+            </tr>
+            <tr>
+              <td style="padding: 9px 8px; border: 1px solid #cbd5e1;">
+                <div style="font-weight: bold;">2. Tiền điện</div>
+                <div style="font-size: 11px; color: #64748b;">Đồng hồ riêng • Chốt ngày 1 Tây</div>
+              </td>
+              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold;">${invoice.oldElectricity} ➔ ${invoice.newElectricity}</td>
+              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold; color: #2563eb;">${invoice.electricityUsage} kWh</td>
+              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right;">${formatVND(invoice.electricityPrice)}</td>
+              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right; font-weight: bold;">${formatVND(invoice.electricityCost)}</td>
+            </tr>
+            <tr>
+              <td style="padding: 9px 8px; border: 1px solid #cbd5e1;">
+                <div style="font-weight: bold;">3. Tiền nước</div>
+                <div style="font-size: 11px; color: #64748b;">Đồng hồ riêng • Chốt ngày 1 Tây</div>
+              </td>
+              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold;">${invoice.oldWater} ➔ ${invoice.newWater}</td>
+              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold; color: #0891b2;">${invoice.waterUsage} m³</td>
+              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right;">${formatVND(invoice.waterPrice)}</td>
+              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right; font-weight: bold;">${formatVND(invoice.waterCost)}</td>
+            </tr>
+            <tr>
+              <td style="padding: 9px 8px; border: 1px solid #cbd5e1;"><div style="font-weight: bold;">4. Phí Wifi Internet</div></td>
+              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center; color: #94a3b8;">---</td>
+              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: center;">1 phòng</td>
+              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right;">${formatVND(invoice.wifiFee)}</td>
+              <td style="padding: 9px 8px; border: 1px solid #cbd5e1; text-align: right; font-weight: bold;">${formatVND(invoice.wifiFee)}</td>
+            </tr>
+            ${extraFeesRows}
+            ${discountRow}
+            <tr class="total-row">
+              <td colspan="4" style="padding: 12px; text-align: right; font-size: 13px;">TỔNG CỘNG TIỀN PHẢI NỘP:</td>
+              <td style="padding: 12px; text-align: right; font-size: 16px; color: #fde047;">${formatVND(invoice.totalAmount)}</td>
+            </tr>
+            ${paidRow}
+            ${remainingRow}
+          </tbody>
+        </table>
+
+        <div class="qr-section">
+          <img src="${qrUrl}" alt="VietQR" class="qr-img" />
+          <div style="font-size: 12px; line-height: 1.6;">
+            <div style="font-weight: bold; color: #1e3a8a; font-size: 13px;">THÔNG TIN CHUYỂN KHOẢN VIETQR:</div>
+            <div>Ngân hàng: <strong>${settings.bankName || ''}</strong> • STK: <strong>${settings.bankAccount || ''}</strong></div>
+            <div>Chủ tài khoản: <strong>${settings.bankOwner || ''}</strong></div>
+            <div>Số tiền: <strong style="color: #dc2626;">${formatVND(invoice.remainingAmount > 0 ? invoice.remainingAmount : invoice.totalAmount)}</strong></div>
+            <div>Nội dung: <strong>${(invoice.roomName?.replace(/[^0-9]/g, 'P') || 'P') + ' TIEN TRO T' + (invoice.month?.replace('-', '') || '')}</strong></div>
+          </div>
+        </div>
+
+        <div class="signatures">
+          <div>
+            <div style="font-weight: bold;">Người nộp tiền</div>
+            <div style="font-size: 11px; color: #94a3b8;">(Ký, ghi rõ họ tên)</div>
+            <div style="height: 55px;"></div>
+            <div style="font-weight: bold;">${invoice.tenantName || 'Khách thuê'}</div>
+          </div>
+          <div>
+            <div style="font-weight: bold;">Người thu tiền (Chủ trọ)</div>
+            <div style="font-size: 11px; color: #94a3b8;">(Ký, ghi rõ họ tên)</div>
+            <div style="height: 55px; display: flex; align-items: center; justify-content: center;">
+              ${invoice.status === 'PAID' ? '<span class="stamp">✓ ĐÃ THU ĐỦ</span>' : ''}
+            </div>
+            <div style="font-weight: bold;">${settings.landlordName || ''}</div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+    }, 400);
+  };
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
       <div className="relative bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-slate-200">
@@ -371,8 +563,8 @@ Cảm ơn anh/chị!`;
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => window.print()}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 shadow-2xs transition-colors"
+              onClick={handlePrintWindow}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 shadow-2xs transition-colors cursor-pointer"
             >
               <Printer className="w-4 h-4 text-slate-500" />
               In Hóa Đơn / Lưu PDF

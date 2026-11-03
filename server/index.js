@@ -684,13 +684,94 @@ app.get('/api/invoices/:id', (req, res) => {
   res.json(invoice);
 });
 
+// Single invoice manual create or update
+app.post('/api/invoices', (req, res) => {
+  try {
+    const {
+      roomId, month, roomPrice, oldElectricity, newElectricity, electricityPrice,
+      oldWater, newWater, waterPrice, wifiFee, extraFees, discount, paidAmount,
+      notes, dueDate
+    } = req.body;
+
+    const room = db.prepare('SELECT * FROM rooms WHERE id = ?').get(roomId);
+    if (!room) return res.status(404).json({ success: false, message: 'Không tìm thấy phòng' });
+
+    const tenant = db.prepare("SELECT * FROM tenants WHERE roomId = ? AND isRepresentative = 1 AND status = 'ACTIVE' LIMIT 1").get(roomId)
+      || db.prepare("SELECT * FROM tenants WHERE roomId = ? AND status = 'ACTIVE' LIMIT 1").get(roomId);
+    const schedule = computeBillingSchedule(month, tenant?.startDate);
+
+    const eUsage = Math.max(0, (Number(newElectricity) || 0) - (Number(oldElectricity) || 0));
+    const eCost = Math.round(eUsage * (Number(electricityPrice) || 4000));
+
+    const wUsage = Math.max(0, (Number(newWater) || 0) - (Number(oldWater) || 0));
+    const wCost = Math.round(wUsage * (Number(waterPrice) || 12000));
+
+    const fees = Array.isArray(extraFees) ? extraFees : (typeof extraFees === 'string' ? JSON.parse(extraFees || '[]') : []);
+    const totalExtra = fees.reduce((sum, f) => sum + (Number(f.amount) || 0), 0);
+
+    const rPrice = Number(roomPrice) || room.basePrice || 1500000;
+    const wFee = Number(wifiFee) || room.wifiFee || 50000;
+    const disc = Number(discount) || 0;
+    const total = Math.max(0, rPrice + eCost + wCost + wFee + totalExtra - disc);
+    const paid = Number(paidAmount) || 0;
+    const remaining = Math.max(0, total - paid);
+
+    let status = 'UNPAID';
+    if (remaining === 0 && total > 0) status = 'PAID';
+    else if (paid > 0 && remaining > 0) status = 'PARTIAL';
+
+    const code = `HD-${(month || '').replace('-', '')}-${room.name.replace(/[^0-9]/g, '') || room.id}`;
+    const now = new Date().toISOString();
+
+    const existing = db.prepare('SELECT id FROM invoices WHERE roomId = ? AND month = ?').get(roomId, month);
+    if (existing) {
+      db.prepare(`
+        UPDATE invoices SET
+          roomPrice = ?, oldElectricity = ?, newElectricity = ?, electricityUsage = ?, electricityPrice = ?, electricityCost = ?,
+          oldWater = ?, newWater = ?, waterUsage = ?, waterPrice = ?, waterCost = ?,
+          wifiFee = ?, extraFees = ?, totalExtraFee = ?, discount = ?, totalAmount = ?, remainingAmount = ?,
+          status = ?, notes = ?, updatedAt = ?, rentDueDate = ?, utilityDueDate = ?
+        WHERE id = ?
+      `).run(
+        rPrice, Number(oldElectricity) || 0, Number(newElectricity) || 0, eUsage, Number(electricityPrice) || 4000, eCost,
+        Number(oldWater) || 0, Number(newWater) || 0, wUsage, Number(waterPrice) || 12000, wCost,
+        wFee, JSON.stringify(fees), totalExtra, disc, total, remaining,
+        status, notes || '', now, schedule.rentDueDate, schedule.utilityDueDate, existing.id
+      );
+      return res.json({ success: true, id: existing.id, message: 'Đã cập nhật hóa đơn' });
+    }
+
+    const result = db.prepare(`
+      INSERT INTO invoices (
+        invoiceCode, roomId, month, roomPrice,
+        oldElectricity, newElectricity, electricityUsage, electricityPrice, electricityCost,
+        oldWater, newWater, waterUsage, waterPrice, waterCost,
+        wifiFee, extraFees, totalExtraFee, discount, totalAmount, paidAmount, remainingAmount,
+        status, dueDate, notes, createdAt, updatedAt, rentDueDate, utilityDueDate
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      code, roomId, month, rPrice,
+      Number(oldElectricity) || 0, Number(newElectricity) || 0, eUsage, Number(electricityPrice) || 4000, eCost,
+      Number(oldWater) || 0, Number(newWater) || 0, wUsage, Number(waterPrice) || 12000, wCost,
+      wFee, JSON.stringify(fees), totalExtra, disc, total, paid, remaining,
+      status, dueDate || schedule.rentDueDate, notes || '', now, now, schedule.rentDueDate, schedule.utilityDueDate
+    );
+
+    return res.json({ success: true, id: result.lastInsertRowid, message: 'Đã tạo hóa đơn mới' });
+  } catch (err) {
+    console.error('Lỗi lưu hóa đơn:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi: ' + err.message });
+  }
+});
+
 // One-click Automated Month Generation for all rooms
 app.post('/api/invoices/generate-batch', (req, res) => {
   const { month } = req.body; // e.g. '2026-11'
   if (!month) return res.status(400).json({ error: 'Month is required (YYYY-MM)' });
 
   const settings = db.prepare('SELECT * FROM settings WHERE id = 1').get();
-  const rooms = db.prepare("SELECT * FROM rooms WHERE status = 'OCCUPIED'").all();
+  // Select ALL rooms so the landlord can bill all rooms in the house
+  const rooms = db.prepare("SELECT * FROM rooms ORDER BY floor ASC, name ASC").all();
 
   // Find previous month string (e.g., '2026-10')
   const [yearStr, monthStr] = month.split('-');
@@ -714,7 +795,8 @@ app.post('/api/invoices/generate-batch', (req, res) => {
     const prevInvoice = db.prepare('SELECT * FROM invoices WHERE roomId = ? AND month = ?').get(room.id, prevMonthStr);
 
     // Lookup active tenant start date to compute contract day
-    const tenant = db.prepare("SELECT * FROM tenants WHERE roomId = ? AND isRepresentative = 1 AND status = 'ACTIVE' LIMIT 1").get(room.id);
+    const tenant = db.prepare("SELECT * FROM tenants WHERE roomId = ? AND isRepresentative = 1 AND status = 'ACTIVE' LIMIT 1").get(room.id)
+      || db.prepare("SELECT * FROM tenants WHERE roomId = ? AND status = 'ACTIVE' LIMIT 1").get(room.id);
     const schedule = computeBillingSchedule(month, tenant?.startDate);
 
     const oldElectricity = prevInvoice ? prevInvoice.newElectricity : 0;
@@ -729,7 +811,7 @@ app.post('/api/invoices/generate-batch', (req, res) => {
     const defaultExtra = JSON.stringify([{ name: 'Rác & Vệ sinh chung', amount: garbageFee }]);
     const totalExtra = garbageFee;
 
-    const code = `HD-${month.replace('-', '')}-${room.name.replace(/[^0-9]/g, '')}`;
+    const code = `HD-${month.replace('-', '')}-${room.name.replace(/[^0-9]/g, '') || room.id}`;
 
     if (!existing) {
       // By default new = old if not entered yet, total = roomPrice + wifiFee + extra
@@ -744,8 +826,8 @@ app.post('/api/invoices/generate-batch', (req, res) => {
           oldElectricity, newElectricity, electricityUsage, electricityPrice, electricityCost,
           oldWater, newWater, waterUsage, waterPrice, waterCost,
           wifiFee, extraFees, totalExtraFee, discount, totalAmount, paidAmount, remainingAmount,
-          status, dueDate, notes, createdAt, updatedAt
-        ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?, 0, ?, 0, ?, ?, ?, 0, ?, 0, ?, 'UNPAID', ?, ?, ?, ?)
+          status, dueDate, notes, createdAt, updatedAt, rentDueDate, utilityDueDate
+        ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?, 0, ?, 0, ?, ?, ?, 0, ?, 0, ?, 'UNPAID', ?, ?, ?, ?, ?, ?)
       `).run(
         code, room.id, month, roomPrice,
         oldElectricity, newElectricity, ePrice,
@@ -753,7 +835,7 @@ app.post('/api/invoices/generate-batch', (req, res) => {
         wifiFee, defaultExtra, totalExtra, total, total,
         dueDate,
         `Tự động: Tiền phòng thu ngày ${schedule.actualRentDay} theo HĐ, Điện nước chốt ngày 1 Tây`,
-        now, now
+        now, now, schedule.rentDueDate, schedule.utilityDueDate
       );
       createdCount++;
     } else {
