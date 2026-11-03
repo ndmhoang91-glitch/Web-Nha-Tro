@@ -238,11 +238,8 @@ function initDatabase() {
         1500000, 50000, 4000, 12000, 30000, 5, 'admin123'
       )
     `).run();
-  }
 
-  // Initialize 6 Rooms if not exists
-  const roomCount = db.prepare('SELECT COUNT(*) as count FROM rooms').get().count;
-  if (roomCount === 0) {
+    // Initialize default rooms ONLY on brand new fresh installation (settingsCount === 0)
     const insertRoom = db.prepare(`
       INSERT INTO rooms (name, floor, basePrice, wifiFee, status, area, description)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -559,6 +556,19 @@ function initDatabase() {
       now,
       'Chủ Nhà Trọ'
     );
+  }
+  // Ensure extra columns exist in invoices table if older DB
+  try {
+    const tableInfo = db.prepare('PRAGMA table_info(invoices)').all();
+    const colNames = tableInfo.map(c => c.name);
+    if (!colNames.includes('rentDueDate')) {
+      db.prepare('ALTER TABLE invoices ADD COLUMN rentDueDate TEXT').run();
+    }
+    if (!colNames.includes('utilityDueDate')) {
+      db.prepare('ALTER TABLE invoices ADD COLUMN utilityDueDate TEXT').run();
+    }
+  } catch (e) {
+    // Ignore if already exists
   }
 }
 

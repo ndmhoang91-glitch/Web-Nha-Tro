@@ -48,6 +48,18 @@ export default function TenantPortal({
 
   // Maintenance request form
   const [requests, setRequests] = useState([]);
+
+  if (!rooms || rooms.length === 0) {
+    return (
+      <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 shadow-sm max-w-lg mx-auto my-8">
+        <Home className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+        <h3 className="font-bold text-slate-800 text-lg">Chưa có dữ liệu phòng trọ</h3>
+        <p className="text-xs text-slate-500 mt-2">
+          Hệ thống hiện chưa có phòng trọ nào. Vui lòng chuyển sang giao diện Quản Lý ở góc trên để tạo phòng trọ mới.
+        </p>
+      </div>
+    );
+  }
   const [reqTitle, setReqTitle] = useState('');
   const [reqDesc, setReqDesc] = useState('');
   const [submittingReq, setSubmittingReq] = useState(false);
@@ -163,6 +175,18 @@ export default function TenantPortal({
               <span>•</span>
               <span>Tiền cọc: <strong className="text-amber-300 font-bold">{formatVND(currentTenant?.deposit || 1500000)}</strong></span>
             </p>
+
+            <div className="flex flex-wrap items-center gap-2 mt-2 pt-2 border-t border-emerald-700/40 text-xs">
+              <span className="bg-emerald-800/80 text-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-600/50 flex items-center gap-1.5">
+                📅 Ngày ký HĐ: <strong className="text-white">{currentTenant?.startDate ? new Date(currentTenant.startDate).toLocaleDateString('vi-VN') : '---'}</strong>
+              </span>
+              <span className="bg-blue-900/60 text-blue-200 px-2.5 py-1 rounded-lg border border-blue-500/40 flex items-center gap-1.5">
+                🏠 Tiền phòng: Thu ngày <strong className="text-white">{currentInvoice?.rentDueDay || (currentTenant?.startDate ? new Date(currentTenant.startDate).getDate() : 1)} hàng tháng</strong>
+              </span>
+              <span className="bg-amber-900/60 text-amber-200 px-2.5 py-1 rounded-lg border border-amber-500/40 flex items-center gap-1.5">
+                ⚡ Điện nước: Thu ngày <strong className="text-white">1 Tây hàng tháng</strong>
+              </span>
+            </div>
           </div>
 
           {/* Quick Room Switcher */}
@@ -358,7 +382,9 @@ export default function TenantPortal({
                   <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
                     <div>
                       <span className="font-bold text-slate-800 block text-sm">1. Tiền thuê phòng trọ</span>
-                      <span className="text-slate-500 text-[11px]">Giá thuê niêm yết cố định</span>
+                      <span className="text-blue-700 text-[11px] font-medium block">
+                        Kỳ: {currentInvoice.rentCycleStr || (currentInvoice.schedule?.rentCycleStr) || '1 tháng'} • Thu ngày {currentInvoice.rentDueDay || 1} hàng tháng
+                      </span>
                     </div>
                     <span className="text-sm font-black text-slate-900">{formatVND(currentInvoice.roomPrice)}</span>
                   </div>
@@ -369,6 +395,7 @@ export default function TenantPortal({
                       <div className="flex items-center gap-1.5 font-bold text-amber-900 text-sm">
                         <span>2. Tiền điện sinh hoạt</span>
                         <span className="bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0.2 rounded-sm font-semibold">4.000 đ/kW</span>
+                        <span className="bg-white text-amber-900 text-[10px] px-1.5 py-0.2 rounded-sm border border-amber-200">Chốt ngày 1 Tây</span>
                       </div>
                       <span className="text-slate-600 text-[11px] font-mono">
                         Số cũ: <strong>{currentInvoice.oldElectricity}</strong> ➔ Số mới: <strong>{currentInvoice.newElectricity}</strong> = <strong className="text-amber-800">{currentInvoice.electricityUsage} kWh</strong>
@@ -383,6 +410,7 @@ export default function TenantPortal({
                       <div className="flex items-center gap-1.5 font-bold text-cyan-900 text-sm">
                         <span>3. Tiền nước sinh hoạt</span>
                         <span className="bg-cyan-100 text-cyan-800 text-[10px] px-1.5 py-0.2 rounded-sm font-semibold">12.000 đ/khối</span>
+                        <span className="bg-white text-cyan-900 text-[10px] px-1.5 py-0.2 rounded-sm border border-cyan-200">Chốt ngày 1 Tây</span>
                       </div>
                       <span className="text-slate-600 text-[11px] font-mono">
                         Số cũ: <strong>{currentInvoice.oldWater}</strong> ➔ Số mới: <strong>{currentInvoice.newWater}</strong> = <strong className="text-cyan-800">{currentInvoice.waterUsage} m³</strong>

@@ -4,7 +4,7 @@ import {
   Plus, Sparkles, CheckCircle2, Clock, AlertTriangle, Zap, Droplet, Wifi,
   Printer, Copy, Search, ArrowUpRight, ArrowDownRight, DollarSign, Eye,
   Building, Phone, CreditCard, ChevronRight, Check, Bell, Trash2, Send,
-  Edit3, Pencil
+  Edit3, Pencil, Calendar, Home, Building2
 } from 'lucide-react';
 import { formatVND, generateBatchInvoices, updateSettings, deleteAnnouncement, deleteRoom } from '../api';
 import confetti from 'canvas-confetti';
@@ -331,6 +331,183 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
             </div>
           )}
 
+          {/* Smart Billing Schedule Section: Contract Date Rent vs 1-Tây Utilities */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3 mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                    Lịch Thu Tiền Phòng & Chốt Điện Nước Tự Động
+                    <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                      Cơ chế chuẩn
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    🏠 <strong>Tiền phòng:</strong> Thu theo ngày ký HĐ (đúng ngày ký tháng này ➔ thu ngày đó tháng sau) • ⚡ <strong>Điện nước:</strong> Chốt số & thu ngày 1 Tây hàng tháng
+                  </p>
+                </div>
+              </div>
+              <div className="text-xs text-slate-500 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-blue-600" />
+                <span>Hôm nay: <strong>{new Date().toLocaleDateString('vi-VN')}</strong></span>
+              </div>
+            </div>
+
+            {/* Room Schedule Cards */}
+            {rooms.length === 0 ? (
+              <div className="text-center py-6 text-slate-400 text-xs">
+                Chưa có phòng trọ nào. Hãy thêm phòng mới để bắt đầu thiết lập lịch thu tiền!
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {rooms.map(room => {
+                  const inv = invoices.find(i => i.roomId === room.id);
+                  const isOccupied = room.status === 'OCCUPIED';
+                  const tenant = tenants.find(t => t.roomId === room.id && t.isRepresentative && t.status === 'ACTIVE') || tenants.find(t => t.roomId === room.id && t.status === 'ACTIVE');
+                  const schedule = inv?.schedule;
+                  const rentDay = schedule?.actualRentDay || (tenant?.startDate ? new Date(tenant.startDate).getDate() : 1);
+                  const rentCycleStr = schedule?.rentCycleStr || `Ngày ${rentDay} tháng này ➔ Ngày ${rentDay} tháng sau`;
+                  const isPaid = inv?.status === 'PAID';
+                  const isPending = inv?.status === 'PENDING_APPROVAL';
+
+                  return (
+                    <div
+                      key={room.id}
+                      className={`rounded-xl border p-3.5 flex flex-col justify-between transition-all ${
+                        isPaid
+                          ? 'bg-emerald-50/40 border-emerald-200'
+                          : isOccupied
+                          ? 'bg-slate-50/70 border-slate-200 hover:border-blue-300'
+                          : 'bg-slate-50/30 border-dashed border-slate-200'
+                      }`}
+                    >
+                      <div>
+                        {/* Header: Room Name & Status */}
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-slate-900 text-sm">{room.name}</span>
+                            <span className="text-[10px] bg-white border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-mono">
+                              T{room.floor}
+                            </span>
+                          </div>
+                          {isOccupied ? (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              isPaid
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : isPending
+                                ? 'bg-amber-100 text-amber-800'
+                                : schedule?.diffDays < 0
+                                ? 'bg-rose-100 text-rose-800'
+                                : 'bg-blue-100 text-blue-800'
+                            }`}>
+                              {isPaid ? '✓ Đã thu đủ' : isPending ? '⏳ Chờ duyệt' : schedule?.rentDueStatusText || 'Chưa đóng'}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-medium text-slate-400 bg-white px-2 py-0.5 rounded border border-slate-200">
+                              Phòng trống
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Tenant Info */}
+                        {isOccupied && tenant ? (
+                          <div className="text-[11px] text-slate-600 mb-2.5 pb-2 border-b border-slate-200/60 flex items-center justify-between">
+                            <span className="font-semibold text-slate-800 truncate">{tenant.fullName}</span>
+                            <span className="text-slate-500 font-mono text-[10px]">
+                              Ký HĐ: {tenant.startDate ? new Date(tenant.startDate).toLocaleDateString('vi-VN') : 'Chưa nhập'}
+                            </span>
+                          </div>
+                        ) : null}
+
+                        {/* Dual Timelines */}
+                        {isOccupied ? (
+                          <div className="space-y-2 text-xs">
+                            {/* Tiền phòng */}
+                            <div className="bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-2xs">
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-slate-800 flex items-center gap-1 text-[11px]">
+                                  <Home className="w-3 h-3 text-blue-600" /> Tiền phòng:
+                                </span>
+                                <span className="font-bold text-blue-700 text-xs">
+                                  {formatVND(room.basePrice)}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-600 mt-1 flex items-center justify-between">
+                                <span>Lịch thu:</span>
+                                <strong className="text-blue-800 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                                  Ngày {rentDay} hàng tháng
+                                </strong>
+                              </div>
+                              <div className="text-[10px] text-slate-500 mt-1 font-mono truncate" title={rentCycleStr}>
+                                Kỳ: {rentCycleStr}
+                              </div>
+                            </div>
+
+                            {/* Tiền điện nước */}
+                            <div className="bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-2xs">
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-slate-800 flex items-center gap-1 text-[11px]">
+                                  <Zap className="w-3 h-3 text-amber-500" /> Điện & Nước:
+                                </span>
+                                <span className="font-semibold text-slate-700 text-[11px]">
+                                  {inv ? formatVND((inv.electricityCost || 0) + (inv.waterCost || 0) + (inv.wifiFee || 0)) : 'Chưa tính'}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-600 mt-1 flex items-center justify-between">
+                                <span>Chốt & thu:</span>
+                                <strong className="text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                  Ngày 1 Tây hàng tháng
+                                </strong>
+                              </div>
+                              {inv && (
+                                <div className="text-[10px] text-slate-500 mt-1 flex items-center justify-between">
+                                  <span>Điện: {inv.electricityUsage} kWh</span>
+                                  <span>Nước: {inv.waterUsage} m³</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="py-4 text-center text-xs text-slate-400 italic">
+                            Chưa có khách thuê
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Action footer */}
+                      {isOccupied && (
+                        <div className="mt-3 pt-2 border-t border-slate-200/60 flex items-center justify-between gap-1">
+                          <button
+                            type="button"
+                            onClick={() => onOpenMeterModal(inv || { roomId: room.id, month: currentMonth })}
+                            className="px-2 py-1 text-[11px] font-semibold rounded-md bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 flex items-center gap-1 cursor-pointer"
+                            title="Ghi chỉ số điện nước ngày 1 Tây"
+                          >
+                            <Zap className="w-3 h-3 text-amber-500" /> Số điện nước
+                          </button>
+                          {inv ? (
+                            <button
+                              type="button"
+                              onClick={() => onOpenInvoiceModal(inv)}
+                              className="px-2.5 py-1 text-[11px] font-bold rounded-md bg-blue-600 hover:bg-blue-700 text-white shadow-2xs cursor-pointer"
+                            >
+                              Xem Bill
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic">Chưa tạo bill</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {/* 6 Rooms Visual Grid */}
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
@@ -345,7 +522,7 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => onOpenRoomModal(null)}
+                  onClick={() => onOpenRoomModal({})}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 shadow-2xs cursor-pointer"
                   title="Thêm phòng trọ mới vào hệ thống"
                 >
@@ -354,7 +531,7 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
 
                 <button
                   type="button"
-                  onClick={() => onOpenTenantModal(null)}
+                  onClick={() => onOpenTenantModal({})}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" /> Thêm Khách Mới
@@ -363,7 +540,23 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {rooms.map(room => {
+              {rooms.length === 0 ? (
+                <div className="col-span-full py-12 text-center bg-white rounded-2xl border border-dashed border-slate-300 p-8 shadow-2xs">
+                  <Building2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                  <h4 className="font-bold text-slate-700 text-base">Chưa có phòng trọ nào trong hệ thống</h4>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 mb-4">
+                    Hiện bạn chưa có phòng trọ nào. Hãy bấm nút dưới đây để tạo phòng trọ mới với giá thuê và diện tích theo ý bạn!
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => onOpenRoomModal({})}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" /> Thêm Phòng Trọ Đầu Tiên
+                  </button>
+                </div>
+              ) : (
+                rooms.map(room => {
                 // Find invoice for this room
                 const inv = invoices.find(i => i.roomId === room.id);
                 const isOccupied = room.status === 'OCCUPIED';
@@ -452,6 +645,32 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                               Chưa tạo hóa đơn tháng này
                             </div>
                           )}
+
+                          {/* Billing Schedule Summary Badge */}
+                          {(() => {
+                            const tenant = tenants.find(t => t.roomId === room.id && t.isRepresentative && t.status === 'ACTIVE') || tenants.find(t => t.roomId === room.id && t.status === 'ACTIVE');
+                            const rentDay = inv?.schedule?.actualRentDay || (tenant?.startDate ? new Date(tenant.startDate).getDate() : 1);
+                            return (
+                              <div className="bg-blue-50/70 border border-blue-100 rounded-xl p-2 text-[11px] space-y-1">
+                                <div className="flex items-center justify-between text-blue-900">
+                                  <span className="flex items-center gap-1 font-semibold">
+                                    <Home className="w-3 h-3 text-blue-600" /> Tiền phòng:
+                                  </span>
+                                  <span className="font-bold text-blue-800 bg-white px-1.5 py-0.5 rounded border border-blue-200">
+                                    Thu ngày {rentDay} hàng tháng
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between text-emerald-900">
+                                  <span className="flex items-center gap-1 font-semibold">
+                                    <Zap className="w-3 h-3 text-amber-500" /> Điện nước:
+                                  </span>
+                                  <span className="font-bold text-emerald-800 bg-white px-1.5 py-0.5 rounded border border-emerald-200">
+                                    Thu ngày 1 Tây hàng tháng
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </div>
                       ) : (
                         <div className="bg-slate-50 rounded-xl p-4 text-center my-4 space-y-2">
@@ -541,7 +760,8 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
 
                   </div>
                 );
-              })}
+              })
+            )}
             </div>
           </div>
 

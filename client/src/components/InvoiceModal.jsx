@@ -23,12 +23,15 @@ export default function InvoiceModal({
   );
 
   const handleCopyZalo = () => {
-    const text = `🏠 THÔNG BÁO TIỀN PHÒNG THÁNG ${invoice.month?.slice(5)}/${invoice.month?.slice(0, 4)} - ${invoice.roomName}
+    const rentDay = invoice.rentDueDay || (invoice.schedule?.actualRentDay) || '10';
+    const rentCycleStr = invoice.rentCycleStr || (invoice.schedule?.rentCycleStr) || '1 tháng';
+    const text = `🏠 THÔNG BÁO TIỀN PHÒNG & ĐIỆN NƯỚC THÁNG ${invoice.month?.slice(5)}/${invoice.month?.slice(0, 4)} - ${invoice.roomName}
 👤 Khách thuê: ${invoice.tenantName || 'Anh/Chị'}
 ------------------------------------
 1️⃣ Tiền thuê phòng: ${formatVND(invoice.roomPrice)}
-2️⃣ Tiền điện (${invoice.oldElectricity} ➡️ ${invoice.newElectricity} = ${invoice.electricityUsage} kWh x ${formatVND(invoice.electricityPrice)}): ${formatVND(invoice.electricityCost)}
-3️⃣ Tiền nước (${invoice.oldWater} ➡️ ${invoice.newWater} = ${invoice.waterUsage} m³ x ${formatVND(invoice.waterPrice)}): ${formatVND(invoice.waterCost)}
+   (Kỳ thuê: ${rentCycleStr} • Thu đúng ngày ${rentDay} hàng tháng theo HĐ)
+2️⃣ Tiền điện (Chốt ngày 1 Tây: ${invoice.oldElectricity} ➡️ ${invoice.newElectricity} = ${invoice.electricityUsage} kWh x ${formatVND(invoice.electricityPrice)}): ${formatVND(invoice.electricityCost)}
+3️⃣ Tiền nước (Chốt ngày 1 Tây: ${invoice.oldWater} ➡️ ${invoice.newWater} = ${invoice.waterUsage} m³ x ${formatVND(invoice.waterPrice)}): ${formatVND(invoice.waterCost)}
 4️⃣ Phí Internet/Wifi: ${formatVND(invoice.wifiFee)}
 ${invoice.extraFees && invoice.extraFees.length > 0 ? invoice.extraFees.map(f => `5️⃣ ${f.name}: ${formatVND(f.amount)}`).join('\n') : ''}
 ${invoice.discount > 0 ? `🔻 Giảm trừ: -${formatVND(invoice.discount)}` : ''}
@@ -36,12 +39,14 @@ ${invoice.discount > 0 ? `🔻 Giảm trừ: -${formatVND(invoice.discount)}` : 
 👉 TỔNG TIỀN PHẢI NỘP: ${formatVND(invoice.totalAmount)}
 ${invoice.paidAmount > 0 ? `✅ Đã thanh toán: ${formatVND(invoice.paidAmount)}\n⏳ CÒN LẠI: ${formatVND(invoice.remainingAmount)}` : ''}
 ------------------------------------
+⏰ LỊCH VÀ HẠN THANH TOÁN:
+- 🏠 Tiền phòng: Thu đúng ngày ${rentDay} hàng tháng (kỳ ${rentCycleStr})
+- ⚡ Tiền điện & nước: Chốt và thu ngày 1 Tây hàng tháng
 💳 THÔNG TIN CHUYỂN KHOẢN:
 - Ngân hàng: ${settings.bankName}
 - Số tài khoản: ${settings.bankAccount}
 - Chủ tài khoản: ${settings.bankOwner}
 - Nội dung: ${invoice.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${invoice.month?.replace('-', '')}
-⏰ Hạn đóng: Trước ngày ${invoice.dueDate || '05'} hàng tháng.
 Cảm ơn anh/chị!`;
 
     navigator.clipboard.writeText(text);
@@ -137,8 +142,12 @@ Cảm ơn anh/chị!`;
               <strong className="text-slate-900">{invoice.tenantPhone || '---'}</strong>
             </div>
             <div>
-              <span className="text-slate-500">Hạn thanh toán:</span>{' '}
-              <strong className="text-rose-600 font-semibold">{invoice.dueDate || 'Mùng 5 hàng tháng'}</strong>
+              <span className="text-slate-500">Lịch thu tiền phòng:</span>{' '}
+              <strong className="text-blue-700 font-bold">Ngày {invoice.rentDueDay || (invoice.schedule?.actualRentDay) || 1} hàng tháng (theo HĐ)</strong>
+            </div>
+            <div>
+              <span className="text-slate-500">Lịch thu điện nước:</span>{' '}
+              <strong className="text-emerald-700 font-bold">Ngày 1 Tây hàng tháng</strong>
             </div>
           </div>
 
@@ -157,7 +166,12 @@ Cảm ơn anh/chị!`;
               <tbody className="divide-y divide-slate-200 text-slate-700">
                 {/* Tiền phòng */}
                 <tr>
-                  <td className="p-3 font-semibold text-slate-900">1. Tiền phòng</td>
+                  <td className="p-3">
+                    <div className="font-semibold text-slate-900">1. Tiền phòng</div>
+                    <span className="text-[11px] text-blue-700 font-medium block">
+                      Kỳ: {invoice.rentCycleStr || (invoice.schedule?.rentCycleStr) || '1 tháng'} • Hạn: Ngày {invoice.rentDueDay || 1} hàng tháng
+                    </span>
+                  </td>
                   <td className="p-3 text-center text-slate-400">---</td>
                   <td className="p-3 text-center">1 tháng</td>
                   <td className="p-3 text-right">{formatVND(invoice.roomPrice)}</td>
@@ -168,7 +182,7 @@ Cảm ơn anh/chị!`;
                 <tr>
                   <td className="p-3">
                     <div className="font-semibold text-slate-900">2. Tiền điện</div>
-                    <span className="text-[11px] text-slate-500">Đồng hồ riêng từng phòng</span>
+                    <span className="text-[11px] text-slate-500">Đồng hồ riêng • Chốt ngày 1 Tây</span>
                   </td>
                   <td className="p-3 text-center font-mono">
                     {invoice.oldElectricity} ➔ {invoice.newElectricity}
@@ -184,7 +198,7 @@ Cảm ơn anh/chị!`;
                 <tr>
                   <td className="p-3">
                     <div className="font-semibold text-slate-900">3. Tiền nước</div>
-                    <span className="text-[11px] text-slate-500">Đồng hồ nước máy</span>
+                    <span className="text-[11px] text-slate-500">Đồng hồ nước máy • Chốt ngày 1 Tây</span>
                   </td>
                   <td className="p-3 text-center font-mono">
                     {invoice.oldWater} ➔ {invoice.newWater}

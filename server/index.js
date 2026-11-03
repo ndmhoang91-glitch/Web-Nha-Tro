@@ -182,48 +182,106 @@ app.get('/api/rooms', (req, res) => {
 });
 
 app.post('/api/rooms', (req, res) => {
-  const { name, floor, basePrice, wifiFee, status, area, description, notes } = req.body;
-  const result = db.prepare(`
-    INSERT INTO rooms (name, floor, basePrice, wifiFee, status, area, description, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(name, floor || 1, basePrice || 1500000, wifiFee || 50000, status || 'AVAILABLE', area || 18, description || '', notes || '');
+  try {
+    let { name, floor, basePrice, wifiFee, status, area, description, notes } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: 'Vui lòng nhập tên phòng (VD: Phòng 101)' });
+    }
+    name = name.trim();
 
-  logAudit('THÊM_PHÒNG', `Thêm mới ${name}`);
-  res.json({ success: true, id: result.lastInsertRowid });
+    // Check duplicate room name (case-insensitive)
+    const existing = db.prepare('SELECT id, name FROM rooms WHERE LOWER(TRIM(name)) = LOWER(?)').get(name);
+    if (existing) {
+      return res.status(400).json({ success: false, message: `Phòng "${name}" đã tồn tại trong danh sách!` });
+    }
+
+    const result = db.prepare(`
+      INSERT INTO rooms (name, floor, basePrice, wifiFee, status, area, description, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      name,
+      Number(floor) || 1,
+      Number(basePrice) || 1500000,
+      Number(wifiFee) || 50000,
+      status || 'AVAILABLE',
+      Number(area) || 18,
+      description ? description.trim() : '',
+      notes ? notes.trim() : ''
+    );
+
+    logAudit('THÊM_PHÒNG', `Thêm mới ${name}`, 'MANAGER', 'Chủ Trọ', result.lastInsertRowid);
+    return res.json({ success: true, id: result.lastInsertRowid, message: `Đã thêm ${name} thành công!` });
+  } catch (err) {
+    console.error('Lỗi khi thêm phòng:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi máy chủ khi thêm phòng: ' + err.message });
+  }
 });
 
 app.put('/api/rooms/:id', (req, res) => {
-  const { name, floor, basePrice, wifiFee, status, area, description, notes } = req.body;
-  const existing = db.prepare('SELECT * FROM rooms WHERE id = ?').get(req.params.id);
-  if (!existing) return res.status(404).json({ error: 'Room not found' });
+  try {
+    const roomId = req.params.id;
+    const existing = db.prepare('SELECT * FROM rooms WHERE id = ?').get(roomId);
+    if (!existing) return res.status(404).json({ success: false, message: 'Không tìm thấy phòng cần sửa' });
 
-  db.prepare(`
-    UPDATE rooms SET
-      name = ?, floor = ?, basePrice = ?, wifiFee = ?, status = ?, area = ?, description = ?, notes = ?
-    WHERE id = ?
-  `).run(
-    name || existing.name,
-    floor !== undefined ? floor : existing.floor,
-    basePrice !== undefined ? basePrice : existing.basePrice,
-    wifiFee !== undefined ? wifiFee : existing.wifiFee,
-    status || existing.status,
-    area !== undefined ? area : existing.area,
-    description !== undefined ? description : existing.description,
-    notes !== undefined ? notes : existing.notes,
-    req.params.id
-  );
+    let { name, floor, basePrice, wifiFee, status, area, description, notes } = req.body;
+    const finalName = name && name.trim() ? name.trim() : existing.name;
 
-  logAudit('SỬA_PHÒNG', `Cập nhật thông tin ${name || existing.name}`, 'MANAGER', 'Chủ Trọ', req.params.id);
-  res.json({ success: true });
+    // Check duplicate name if changed
+    if (finalName.toLowerCase() !== existing.name.toLowerCase()) {
+      const duplicate = db.prepare('SELECT id FROM rooms WHERE LOWER(TRIM(name)) = LOWER(?) AND id != ?').get(finalName, roomId);
+      if (duplicate) {
+        return res.status(400).json({ success: false, message: `Tên phòng "${finalName}" đã được sử dụng bởi phòng khác!` });
+      }
+    }
+
+    db.prepare(`
+      UPDATE rooms SET
+        name = ?, floor = ?, basePrice = ?, wifiFee = ?, status = ?, area = ?, description = ?, notes = ?
+      WHERE id = ?
+    `).run(
+      finalName,
+      floor !== undefined ? Number(floor) : existing.floor,
+      basePrice !== undefined ? Number(basePrice) : existing.basePrice,
+      wifiFee !== undefined ? Number(wifiFee) : existing.wifiFee,
+      status || existing.status,
+      area !== undefined ? Number(area) : existing.area,
+      description !== undefined ? description.trim() : existing.description,
+      notes !== undefined ? notes.trim() : existing.notes,
+      roomId
+    );
+
+    logAudit('SỬA_PHÒNG', `Cập nhật thông tin ${finalName}`, 'MANAGER', 'Chủ Trọ', roomId);
+    return res.json({ success: true, message: `Đã cập nhật ${finalName} thành công!` });
+  } catch (err) {
+    console.error('Lỗi khi sửa phòng:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi máy chủ khi sửa phòng: ' + err.message });
+  }
 });
 
 app.delete('/api/rooms/:id', (req, res) => {
-  const room = db.prepare('SELECT * FROM rooms WHERE id = ?').get(req.params.id);
-  if (!room) return res.status(404).json({ error: 'Room not found' });
+  try {
+    const roomId = req.params.id;
+    const room = db.prepare('SELECT * FROM rooms WHERE id = ?').get(roomId);
+    if (!room) return res.status(404).json({ success: false, message: 'Không tìm thấy phòng cần xóa' });
 
-  db.prepare('DELETE FROM rooms WHERE id = ?').run(req.params.id);
-  logAudit('XÓA_PHÒNG', `Đã xóa ${room.name} khỏi hệ thống`, 'MANAGER', 'Chủ Trọ', req.params.id);
-  res.json({ success: true });
+    // Safe transaction cleanup of all child records
+    const deleteTx = db.transaction(() => {
+      db.prepare('DELETE FROM payment_proofs WHERE roomId = ?').run(roomId);
+      db.prepare('DELETE FROM invoices WHERE roomId = ?').run(roomId);
+      db.prepare('DELETE FROM tenants WHERE roomId = ?').run(roomId);
+      db.prepare('DELETE FROM maintenance_requests WHERE roomId = ?').run(roomId);
+      db.prepare('DELETE FROM announcements WHERE targetRoomId = ?').run(roomId);
+      db.prepare('DELETE FROM rooms WHERE id = ?').run(roomId);
+    });
+
+    deleteTx();
+
+    logAudit('XÓA_PHÒNG', `Đã xóa ${room.name} khỏi hệ thống`, 'MANAGER', 'Chủ Trọ', roomId);
+    return res.json({ success: true, message: `Đã xóa ${room.name} thành công!` });
+  } catch (err) {
+    console.error('Lỗi khi xóa phòng:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi máy chủ khi xóa phòng: ' + err.message });
+  }
 });
 
 // ----------------------
@@ -364,12 +422,94 @@ app.delete('/api/tenants/:id', (req, res) => {
 // ----------------------
 // INVOICES & AUTOMATION
 // ----------------------
+
+// Helper: Compute billing schedule based on contract date vs 1-Tây utilities
+function computeBillingSchedule(monthStr, startDateStr) {
+  const [yearStr, monthNumStr] = (monthStr || new Date().toISOString().slice(0, 7)).split('-');
+  const year = parseInt(yearStr);
+  const month = parseInt(monthNumStr); // 1-12
+
+  let rentDay = 1;
+  if (startDateStr) {
+    const d = new Date(startDateStr);
+    if (!isNaN(d.getTime())) {
+      rentDay = d.getDate();
+    }
+  }
+
+  // Days in current month
+  const daysInCurrentMonth = new Date(year, month, 0).getDate();
+  const actualRentDay = Math.min(rentDay, daysInCurrentMonth);
+  const rentDueDate = `${year}-${String(month).padStart(2, '0')}-${String(actualRentDay).padStart(2, '0')}`;
+
+  // Next month for rent cycle end (1 full month cycle)
+  let nextYear = year;
+  let nextMonth = month + 1;
+  if (nextMonth > 12) {
+    nextMonth = 1;
+    nextYear += 1;
+  }
+  const daysInNextMonth = new Date(nextYear, nextMonth, 0).getDate();
+  const nextActualRentDay = Math.min(rentDay, daysInNextMonth);
+  const rentCycleEndDate = `${nextYear}-${String(nextMonth).padStart(2, '0')}-${String(nextActualRentDay).padStart(2, '0')}`;
+
+  // Utility due date: always 1st of month (1 Tây)
+  const utilityDueDate = `${year}-${String(month).padStart(2, '0')}-01`;
+
+  // Previous month for utility period
+  let prevYear = year;
+  let prevMonth = month - 1;
+  if (prevMonth === 0) {
+    prevMonth = 12;
+    prevYear -= 1;
+  }
+
+  // Calculate days diff from today for rent due date
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dueRentDateObj = new Date(year, month - 1, actualRentDay);
+  dueRentDateObj.setHours(0, 0, 0, 0);
+  const diffTime = dueRentDateObj.getTime() - today.getTime();
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+  let rentDueStatusText = '';
+  let rentDueStatusColor = ''; // 'green', 'amber', 'red'
+  if (diffDays === 0) {
+    rentDueStatusText = '🔔 Hôm nay đến hạn!';
+    rentDueStatusColor = 'amber';
+  } else if (diffDays > 0) {
+    rentDueStatusText = `Còn ${diffDays} ngày (Hạn ${String(actualRentDay).padStart(2, '0')}/${String(month).padStart(2, '0')})`;
+    rentDueStatusColor = diffDays <= 3 ? 'amber' : 'green';
+  } else {
+    rentDueStatusText = `Quá hạn ${Math.abs(diffDays)} ngày!`;
+    rentDueStatusColor = 'red';
+  }
+
+  return {
+    rentDay,
+    actualRentDay,
+    rentDueDate,
+    rentDueDateStr: `${String(actualRentDay).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`,
+    rentCycleFrom: rentDueDate,
+    rentCycleTo: rentCycleEndDate,
+    rentCycleStr: `${String(actualRentDay).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year} - ${String(nextActualRentDay).padStart(2, '0')}/${String(nextMonth).padStart(2, '0')}/${nextYear}`,
+    utilityDueDate,
+    utilityDueDateStr: `01/${String(month).padStart(2, '0')}/${year} (1 Tây)`,
+    utilityCycleStr: `Kỳ chốt ngày 01/${String(month).padStart(2, '0')} (1 Tây hàng tháng)`,
+    prevMonthStr: `${prevYear}-${String(prevMonth).padStart(2, '0')}`,
+    diffDays,
+    rentDueStatusText,
+    rentDueStatusColor
+  };
+}
+
 app.get('/api/invoices', (req, res) => {
   const { month, roomId, status } = req.query;
   let query = `
     SELECT inv.*, r.name as roomName, r.floor,
       (SELECT t.fullName FROM tenants t WHERE t.roomId = inv.roomId AND t.isRepresentative = 1 AND t.status = 'ACTIVE' LIMIT 1) as tenantName,
-      (SELECT t.phone FROM tenants t WHERE t.roomId = inv.roomId AND t.isRepresentative = 1 AND t.status = 'ACTIVE' LIMIT 1) as tenantPhone
+      (SELECT t.phone FROM tenants t WHERE t.roomId = inv.roomId AND t.isRepresentative = 1 AND t.status = 'ACTIVE' LIMIT 1) as tenantPhone,
+      (SELECT t.startDate FROM tenants t WHERE t.roomId = inv.roomId AND t.isRepresentative = 1 AND t.status = 'ACTIVE' LIMIT 1) as tenantStartDate
     FROM invoices inv
     JOIN rooms r ON inv.roomId = r.id
     WHERE 1=1
@@ -392,11 +532,20 @@ app.get('/api/invoices', (req, res) => {
   query += ' ORDER BY inv.month DESC, r.name ASC';
   const invoices = db.prepare(query).all(...params);
 
-  // Parse extraFees JSON
-  const parsedInvoices = invoices.map(inv => ({
-    ...inv,
-    extraFees: typeof inv.extraFees === 'string' ? JSON.parse(inv.extraFees || '[]') : inv.extraFees
-  }));
+  // Attach computed schedule and parse extraFees JSON
+  const parsedInvoices = invoices.map(inv => {
+    const schedule = computeBillingSchedule(inv.month, inv.tenantStartDate);
+    return {
+      ...inv,
+      extraFees: typeof inv.extraFees === 'string' ? JSON.parse(inv.extraFees || '[]') : inv.extraFees,
+      schedule,
+      rentDueDay: schedule.actualRentDay,
+      rentDueDate: schedule.rentDueDate,
+      rentCycleStr: schedule.rentCycleStr,
+      utilityDueDate: schedule.utilityDueDate,
+      utilityDueDateStr: schedule.utilityDueDateStr
+    };
+  });
 
   res.json(parsedInvoices);
 });
@@ -405,7 +554,8 @@ app.get('/api/invoices/:id', (req, res) => {
   const invoice = db.prepare(`
     SELECT inv.*, r.name as roomName, r.floor,
       (SELECT t.fullName FROM tenants t WHERE t.roomId = inv.roomId AND t.isRepresentative = 1 AND t.status = 'ACTIVE' LIMIT 1) as tenantName,
-      (SELECT t.phone FROM tenants t WHERE t.roomId = inv.roomId AND t.isRepresentative = 1 AND t.status = 'ACTIVE' LIMIT 1) as tenantPhone
+      (SELECT t.phone FROM tenants t WHERE t.roomId = inv.roomId AND t.isRepresentative = 1 AND t.status = 'ACTIVE' LIMIT 1) as tenantPhone,
+      (SELECT t.startDate FROM tenants t WHERE t.roomId = inv.roomId AND t.isRepresentative = 1 AND t.status = 'ACTIVE' LIMIT 1) as tenantStartDate
     FROM invoices inv
     JOIN rooms r ON inv.roomId = r.id
     WHERE inv.id = ?
@@ -413,6 +563,15 @@ app.get('/api/invoices/:id', (req, res) => {
 
   if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
   invoice.extraFees = JSON.parse(invoice.extraFees || '[]');
+
+  // Attach billing schedule
+  const schedule = computeBillingSchedule(invoice.month, invoice.tenantStartDate);
+  invoice.schedule = schedule;
+  invoice.rentDueDay = schedule.actualRentDay;
+  invoice.rentDueDate = schedule.rentDueDate;
+  invoice.rentCycleStr = schedule.rentCycleStr;
+  invoice.utilityDueDate = schedule.utilityDueDate;
+  invoice.utilityDueDateStr = schedule.utilityDueDateStr;
 
   // Also attach any payment proofs for this invoice
   invoice.proofs = db.prepare(`
@@ -451,6 +610,10 @@ app.post('/api/invoices/generate-batch', (req, res) => {
     // Lookup previous month's invoice to carry over the meter readings!
     const prevInvoice = db.prepare('SELECT * FROM invoices WHERE roomId = ? AND month = ?').get(room.id, prevMonthStr);
 
+    // Lookup active tenant start date to compute contract day
+    const tenant = db.prepare("SELECT * FROM tenants WHERE roomId = ? AND isRepresentative = 1 AND status = 'ACTIVE' LIMIT 1").get(room.id);
+    const schedule = computeBillingSchedule(month, tenant?.startDate);
+
     const oldElectricity = prevInvoice ? prevInvoice.newElectricity : 0;
     const oldWater = prevInvoice ? prevInvoice.newWater : 0;
 
@@ -470,7 +633,7 @@ app.post('/api/invoices/generate-batch', (req, res) => {
       const newElectricity = oldElectricity;
       const newWater = oldWater;
       const total = roomPrice + wifiFee + totalExtra;
-      const dueDate = `${month}-${String(settings.billDueDay || 5).padStart(2, '0')}`;
+      const dueDate = schedule.rentDueDate;
 
       db.prepare(`
         INSERT INTO invoices (
@@ -479,13 +642,15 @@ app.post('/api/invoices/generate-batch', (req, res) => {
           oldWater, newWater, waterUsage, waterPrice, waterCost,
           wifiFee, extraFees, totalExtraFee, discount, totalAmount, paidAmount, remainingAmount,
           status, dueDate, notes, createdAt, updatedAt
-        ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?, 0, ?, 0, ?, ?, ?, 0, ?, 0, ?, 'UNPAID', ?, 'Tự động tạo hóa đơn đầu tháng', ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, 0, ?, ?, 0, ?, 0, ?, ?, ?, 0, ?, 0, ?, 'UNPAID', ?, ?, ?, ?)
       `).run(
         code, room.id, month, roomPrice,
         oldElectricity, newElectricity, ePrice,
         oldWater, newWater, wPrice,
         wifiFee, defaultExtra, totalExtra, total, total,
-        dueDate, now, now
+        dueDate,
+        `Tự động: Tiền phòng thu ngày ${schedule.actualRentDay} theo HĐ, Điện nước chốt ngày 1 Tây`,
+        now, now
       );
       createdCount++;
     } else {

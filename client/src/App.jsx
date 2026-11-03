@@ -145,10 +145,10 @@ export default function App() {
                 onOpenInvoiceModal={(inv) => setActiveInvoiceModal(inv)}
                 onOpenMeterModal={(inv) => setActiveMeterModal(inv)}
                 onOpenProofModal={(proof) => setActiveProofModal(proof)}
-                onOpenTenantModal={(t) => setActiveTenantModal(t !== undefined ? t : {})}
+                onOpenTenantModal={(t) => setActiveTenantModal(t || {})}
                 onOpenExpenseModal={() => setShowExpenseModal(true)}
                 onOpenAnnouncementModal={() => setShowAnnouncementModal(true)}
-                onOpenRoomModal={(r) => setActiveRoomModal(r !== undefined ? r : {})}
+                onOpenRoomModal={(r) => setActiveRoomModal(r || {})}
               />
             ) : (
               <TenantPortal
@@ -244,6 +244,7 @@ export default function App() {
       {activeRoomModal !== null && (
         <RoomModal
           room={activeRoomModal?.id ? activeRoomModal : null}
+          rooms={rooms}
           onClose={() => setActiveRoomModal(null)}
           onSaved={loadAllData}
         />

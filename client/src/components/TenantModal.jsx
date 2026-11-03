@@ -312,13 +312,16 @@ export default function TenantModal({
           {/* Lease Details */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-slate-700 mb-1">Ngày bắt đầu thuê</label>
+              <label className="block text-slate-700 mb-1 font-semibold">Ngày ký HĐ / Bắt đầu ở</label>
               <input
                 type="date"
                 value={startDate}
                 onChange={e => setStartDate(e.target.value)}
-                className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-hidden focus:border-blue-500"
+                className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-hidden focus:border-blue-500 font-medium"
               />
+              <span className="text-[11px] text-blue-600 font-medium block mt-1">
+                📅 Ngày {startDate ? new Date(startDate).getDate() : 1} sẽ là ngày thu tiền phòng hàng tháng (đúng ngày này tháng sau). Tiền điện nước thu theo 1 Tây.
+              </span>
             </div>
             <div>
               <label className="block text-slate-700 mb-1">Tiền đặt cọc (đ)</label>

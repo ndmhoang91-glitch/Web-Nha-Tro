@@ -4,6 +4,7 @@ import { formatVND, createRoom, updateRoom, deleteRoom } from '../api';
 
 export default function RoomModal({
   room = null,
+  rooms = [],
   onClose,
   onSaved
 }) {
@@ -22,7 +23,7 @@ export default function RoomModal({
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    if (room) {
+    if (room && room.id) {
       setName(room.name || '');
       setFloor(room.floor ?? 1);
       setBasePrice(room.basePrice ?? 1500000);
@@ -32,7 +33,21 @@ export default function RoomModal({
       setDescription(room.description || '');
       setNotes(room.notes || '');
     } else {
-      setName('Phòng mới');
+      // Smart suggest next room name
+      let suggestedName = 'Phòng 101';
+      if (rooms && rooms.length > 0) {
+        const numbers = rooms.map(r => {
+          const match = r.name?.match(/\d+/);
+          return match ? parseInt(match[0], 10) : 0;
+        });
+        const maxNum = Math.max(0, ...numbers);
+        if (maxNum > 0) {
+          suggestedName = `Phòng ${maxNum + 1}`;
+        } else {
+          suggestedName = `Phòng ${rooms.length + 1}`;
+        }
+      }
+      setName(suggestedName);
       setFloor(1);
       setBasePrice(1500000);
       setWifiFee(50000);
@@ -41,11 +56,14 @@ export default function RoomModal({
       setDescription('Có gác lửng, toilet riêng, quạt trần, đồng hồ điện nước riêng');
       setNotes('');
     }
-  }, [room]);
+  }, [room, rooms]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim()) {
+      alert('Vui lòng nhập tên phòng (VD: Phòng 101)');
+      return;
+    }
 
     setSaving(true);
     try {
@@ -60,12 +78,19 @@ export default function RoomModal({
         notes: notes.trim()
       };
 
+      let res;
       if (isEditing) {
-        await updateRoom(room.id, payload);
+        res = await updateRoom(room.id, payload);
       } else {
-        await createRoom(payload);
+        res = await createRoom(payload);
       }
 
+      if (!res || res.success === false || res.error) {
+        alert(res?.message || res?.error || 'Có lỗi xảy ra khi lưu phòng!');
+        return;
+      }
+
+      alert(isEditing ? `Đã cập nhật ${payload.name} thành công!` : `Đã thêm ${payload.name} thành công!`);
       if (onSaved) onSaved();
       onClose();
     } catch (err) {

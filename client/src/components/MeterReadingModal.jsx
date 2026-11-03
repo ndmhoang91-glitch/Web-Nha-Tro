@@ -104,10 +104,10 @@ export default function MeterReadingModal({
           <div>
             <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
               <Calculator className="w-5 h-5 text-blue-600" />
-              Ghi Số Điện Nước & Chi Phí - {invoice?.roomName}
+              Chốt Số Điện Nước & Chi Phí - {invoice?.roomName}
             </h3>
-            <p className="text-xs text-slate-500">
-              Kỳ tính tiền: Tháng {invoice?.month?.slice(5)}/{invoice?.month?.slice(0, 4)}
+            <p className="text-xs text-slate-600 mt-0.5">
+              ⚡ <strong>Điện nước:</strong> Chốt & thu ngày 1 Tây hàng tháng • 🏠 <strong>Tiền phòng:</strong> Thu ngày {invoice?.rentDueDay || 'theo HĐ'}
             </p>
           </div>
           <button
