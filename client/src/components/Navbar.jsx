@@ -17,12 +17,12 @@ export default function Navbar({
   onRefresh,
   refreshing = false
 }) {
-  // Generate list of recent months for selector
+  // Generate list of months (cho phép chọn lùi về 12 tháng trước để nhập dữ liệu lịch sử)
   const getMonthOptions = () => {
     const list = [];
-    const date = new Date(2026, 10, 1); // Nov 2026
-    for (let i = -3; i <= 3; i++) {
-      const d = new Date(date.getFullYear(), date.getMonth() + i, 1);
+    const baseDate = new Date();
+    for (let i = -12; i <= 3; i++) {
+      const d = new Date(baseDate.getFullYear(), baseDate.getMonth() + i, 1);
       const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       const label = `Tháng ${d.getMonth() + 1}/${d.getFullYear()}`;
       list.push({ val, label });
