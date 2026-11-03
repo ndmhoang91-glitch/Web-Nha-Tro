@@ -237,6 +237,20 @@ export async function clearAllData(password = '') {
   return res.json();
 }
 
+export async function exportBackup() {
+  const res = await fetch(`${API_BASE}/system/export-backup`);
+  return res.json();
+}
+
+export async function restoreBackup(backupData) {
+  const res = await fetch(`${API_BASE}/system/restore-backup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ backupData })
+  });
+  return res.json();
+}
+
 export function formatVND(amount) {
   if (amount === undefined || amount === null) return '0 đ';
   return Number(amount).toLocaleString('vi-VN') + ' đ';

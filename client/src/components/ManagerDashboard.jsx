@@ -4,9 +4,9 @@ import {
   Plus, Sparkles, CheckCircle2, Clock, AlertTriangle, Zap, Droplet, Wifi,
   Printer, Copy, Search, ArrowUpRight, ArrowDownRight, DollarSign, Eye,
   Building, Phone, CreditCard, ChevronRight, Check, Bell, Trash2, Send,
-  Edit3, Pencil, Calendar, Home, Building2, Key
+  Edit3, Pencil, Calendar, Home, Building2, Key, Download, Upload
 } from 'lucide-react';
-import { formatVND, generateBatchInvoices, updateSettings, deleteAnnouncement, deleteRoom, adminResetTenantPassword, clearAllData } from '../api';
+import { formatVND, generateBatchInvoices, updateSettings, deleteAnnouncement, deleteRoom, adminResetTenantPassword, clearAllData, exportBackup, restoreBackup } from '../api';
 import confetti from 'canvas-confetti';
 
 export default function ManagerDashboard({
@@ -153,6 +153,63 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
       alert('Lỗi kết nối máy chủ: ' + err.message);
     } finally {
       setClearingData(false);
+    }
+  };
+
+  const [backingUp, setBackingUp] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+
+  const handleExportBackup = async () => {
+    setBackingUp(true);
+    try {
+      const data = await exportBackup();
+      const jsonStr = JSON.stringify(data, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const cleanName = (data.houseName || 'nhatro').replace(/\s+/g, '_');
+      const dateStr = new Date().toISOString().slice(0, 10);
+      a.download = `backup_${cleanName}_${dateStr}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert('Lỗi xuất sao lưu: ' + err.message);
+    } finally {
+      setBackingUp(false);
+    }
+  };
+
+  const handleRestoreBackup = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const confirmed = window.confirm(
+      `Bạn có chắc chắn muốn khôi phục dữ liệu từ file "${file.name}" không?\n\nDữ liệu hiện tại sẽ được cập nhật hoàn toàn theo file này.`
+    );
+    if (!confirmed) {
+      e.target.value = '';
+      return;
+    }
+
+    setRestoring(true);
+    try {
+      const text = await file.text();
+      const backupData = JSON.parse(text);
+      const res = await restoreBackup(backupData);
+      if (res.success) {
+        alert('✓ Đã khôi phục thành công toàn bộ dữ liệu nhà trọ!');
+        if (onRefresh) onRefresh();
+      } else {
+        alert(res.message || 'Lỗi khôi phục');
+      }
+    } catch (err) {
+      alert('Lỗi đọc file hoặc khôi phục: ' + err.message);
+    } finally {
+      setRestoring(false);
+      e.target.value = '';
     }
   };
 
@@ -1706,6 +1763,47 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                   Mật khẩu mặc định: <strong className="text-white font-mono">admin123</strong>. Sau khi đổi và bấm <strong>"Lưu Tất Cả Cài Đặt"</strong>, mật khẩu mới sẽ có hiệu lực ngay lập tức.
                 </span>
               </div>
+            </div>
+          </div>
+
+          {/* Backup & Restore Section */}
+          <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-emerald-950">
+                <Download className="w-5 h-5 text-emerald-600 shrink-0" />
+                <span className="font-bold text-sm">
+                  Sao Lưu & Khôi Phục Dữ Liệu An Toàn
+                </span>
+              </div>
+              <span className="text-[11px] text-emerald-800 bg-emerald-100 font-semibold px-2.5 py-0.5 rounded-full border border-emerald-200 w-fit">
+                Bảo vệ 100% dữ liệu phòng & khách thuê
+              </span>
+            </div>
+            <p className="text-xs text-emerald-800 leading-relaxed">
+              Bạn có thể tải file sao lưu về điện thoại hoặc máy tính bất kỳ lúc nào để lưu trữ danh sách phòng, hồ sơ khách thuê, hình CCCD và hóa đơn. Khi cần chuyển thiết bị hoặc khôi phục, chỉ cần chọn lại file sao lưu.
+            </p>
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={handleExportBackup}
+                disabled={backingUp}
+                className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                {backingUp ? 'Đang xuất file...' : 'Tải Về Bản Sao Lưu (.json)'}
+              </button>
+
+              <label className="px-4 py-2.5 bg-white hover:bg-slate-50 border border-emerald-300 text-emerald-800 font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer">
+                <Upload className="w-4 h-4 text-emerald-600" />
+                {restoring ? 'Đang khôi phục...' : 'Khôi Phục Từ File Sao Lưu'}
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleRestoreBackup}
+                  disabled={restoring}
+                  className="hidden"
+                />
+              </label>
             </div>
           </div>
 

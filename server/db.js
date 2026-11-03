@@ -208,12 +208,82 @@ function initDatabase() {
         defaultWifiFee, defaultElectricityPrice, defaultWaterPrice,
         defaultGarbageFee, billDueDay, managerPassword
       ) VALUES (
-        1, 'Nhà Trọ An Cư 6 Phòng', '123/45 Đường Số 8, Phường Linh Trung, TP. Thủ Đức, TP. HCM',
+        1, 'Nhà Trọ Hoàng Phát', '45A/23A, Khóm 3, Đinh Tiên Hoàng, Phường Tân Hạnh, Tỉnh Vĩnh Long',
         'Nguyễn Văn Hoàng', '0988123456',
         'MBBANK', '0988123456', 'NGUYEN VAN HOANG',
         1500000, 50000, 4000, 12000, 30000, 5, 'admin123'
       )
     `).run();
+  }
+
+  // Seed default 6 rooms if database is fresh
+  const roomsCount = db.prepare('SELECT COUNT(*) as count FROM rooms').get().count;
+  if (roomsCount === 0) {
+    const insertRoom = db.prepare(`
+      INSERT INTO rooms (name, floor, basePrice, wifiFee, status, area, description, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const r1 = insertRoom.run('Phòng số 1', 1, 1500000, 50000, 'AVAILABLE', 18, 'Phòng tầng trệt, thoáng mát, vệ sinh khép kín', '');
+    const r2 = insertRoom.run('Phòng số 2', 1, 1500000, 50000, 'AVAILABLE', 18, 'Phòng tầng trệt, thoáng mát, vệ sinh khép kín', '');
+    const r3 = insertRoom.run('Phòng số 3', 1, 1500000, 50000, 'OCCUPIED', 18, 'Phòng tầng trệt, thoáng mát, vệ sinh khép kín', '');
+    const r4 = insertRoom.run('Phòng số 4', 1, 1500000, 50000, 'AVAILABLE', 18, 'Phòng tầng trệt, thoáng mát, vệ sinh khép kín', '');
+    const r5 = insertRoom.run('Phòng số 5', 1, 1500000, 50000, 'AVAILABLE', 18, 'Phòng tầng trệt, thoáng mát, vệ sinh khép kín', '');
+    const r6 = insertRoom.run('Phòng số 6', 1, 1500000, 50000, 'AVAILABLE', 18, 'Phòng tầng trệt, thoáng mát, vệ sinh khép kín', '');
+
+    const room3Id = r3.lastInsertRowid;
+    const now = new Date().toISOString();
+
+    // Seed tenant Nguyễn Mỹ Trân in Phòng số 3
+    db.prepare(`
+      INSERT INTO tenants (
+        roomId, fullName, phone, password, idCardNumber, idCardDate,
+        idCardPlace, idCardFrontUrl, idCardBackUrl, hometown,
+        startDate, deposit, isRepresentative, status, notes, createdAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?)
+    `).run(
+      room3Id,
+      'Nguyễn Mỹ Trân',
+      '0829506597',
+      '0829506597',
+      '094308002875',
+      '2021-05-10',
+      'Cục Cảnh sát QLHC về TTXH',
+      '/uploads/cccd/sample_cccd_front.svg',
+      '/uploads/cccd/sample_cccd_back.svg',
+      'Sóc Trăng',
+      '2026-10-30',
+      1500000,
+      1,
+      'Khách thuê đại diện phòng số 3',
+      now
+    );
+
+    // Seed November 2026 Invoices for 6 rooms
+    const allRooms = db.prepare('SELECT * FROM rooms ORDER BY id ASC').all();
+    const insertInv = db.prepare(`
+      INSERT INTO invoices (
+        invoiceCode, roomId, month, roomPrice,
+        oldElectricity, newElectricity, electricityUsage, electricityPrice, electricityCost,
+        oldWater, newWater, waterUsage, waterPrice, waterCost,
+        wifiFee, extraFees, totalExtraFee, discount, totalAmount, paidAmount, remainingAmount,
+        status, dueDate, notes, createdAt, updatedAt, rentDueDate, utilityDueDate
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    allRooms.forEach(r => {
+      const isP3 = r.id === room3Id;
+      const code = 'HD-202611-' + r.name.replace(/[^0-9]/g, '');
+      const rentDue = isP3 ? '2026-11-30' : '2026-11-01';
+      insertInv.run(
+        code, r.id, '2026-11', 1500000,
+        0, 0, 0, 4000, 0,
+        0, 0, 0, 12000, 0,
+        50000, JSON.stringify([{ name: 'Rác & Vệ sinh chung', amount: 30000 }]), 30000, 0,
+        1580000, 0, 1580000,
+        'UNPAID', rentDue, isP3 ? 'Tiền phòng thu ngày 30 theo HĐ, Điện nước chốt ngày 1 Tây' : 'Chưa có khách',
+        now, now, rentDue, '2026-11-01'
+      );
+    });
   }
 
   // Ensure extra columns exist in invoices table if older DB

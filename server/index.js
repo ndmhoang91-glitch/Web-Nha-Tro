@@ -237,6 +237,174 @@ app.post('/api/system/clear-all-data', (req, res) => {
 });
 
 // ----------------------
+// BACKUP & RESTORE DATA (SAO LƯU & KHÔI PHỤC TOÀN BỘ)
+// ----------------------
+app.get('/api/system/export-backup', (req, res) => {
+  try {
+    const settings = db.prepare('SELECT * FROM settings WHERE id = 1').get();
+    const rooms = db.prepare('SELECT * FROM rooms ORDER BY id ASC').all();
+    const tenants = db.prepare('SELECT * FROM tenants ORDER BY id ASC').all();
+    const invoices = db.prepare('SELECT * FROM invoices ORDER BY id ASC').all();
+    const expenses = db.prepare('SELECT * FROM expenses ORDER BY id ASC').all();
+    const announcements = db.prepare('SELECT * FROM announcements ORDER BY id ASC').all();
+    const requests = db.prepare('SELECT * FROM maintenance_requests ORDER BY id ASC').all();
+    const proofs = db.prepare('SELECT * FROM payment_proofs ORDER BY id ASC').all();
+
+    const backup = {
+      version: 1,
+      appName: 'Web Nha Tro',
+      exportedAt: new Date().toISOString(),
+      houseName: settings?.houseName || 'Nhà Trọ Hoàng Phát',
+      data: {
+        settings,
+        rooms,
+        tenants,
+        invoices,
+        expenses,
+        announcements,
+        maintenance_requests: requests,
+        payment_proofs: proofs
+      }
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    return res.json(backup);
+  } catch (err) {
+    console.error('Lỗi khi xuất sao lưu:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi xuất sao lưu: ' + err.message });
+  }
+});
+
+app.post('/api/system/restore-backup', (req, res) => {
+  try {
+    const { backupData } = req.body;
+    if (!backupData || !backupData.data) {
+      return res.status(400).json({ success: false, message: 'File sao lưu không hợp lệ hoặc thiếu dữ liệu' });
+    }
+
+    const { settings, rooms, tenants, invoices, expenses, announcements, maintenance_requests, payment_proofs } = backupData.data;
+
+    const restoreTx = db.transaction(() => {
+      // 1. Settings
+      if (settings) {
+        db.prepare(`
+          UPDATE settings SET
+            houseName = ?, address = ?, landlordName = ?, landlordPhone = ?,
+            bankName = ?, bankAccount = ?, bankOwner = ?,
+            defaultRoomPrice = ?, defaultWifiFee = ?, defaultElectricityPrice = ?, defaultWaterPrice = ?,
+            defaultGarbageFee = ?, billDueDay = ?
+          WHERE id = 1
+        `).run(
+          settings.houseName, settings.address, settings.landlordName, settings.landlordPhone,
+          settings.bankName, settings.bankAccount, settings.bankOwner,
+          settings.defaultRoomPrice, settings.defaultWifiFee, settings.defaultElectricityPrice, settings.defaultWaterPrice,
+          settings.defaultGarbageFee, settings.billDueDay
+        );
+      }
+
+      // 2. Clear tables
+      db.prepare('DELETE FROM payment_proofs').run();
+      db.prepare('DELETE FROM invoices').run();
+      db.prepare('DELETE FROM maintenance_requests').run();
+      db.prepare('DELETE FROM announcements').run();
+      db.prepare('DELETE FROM expenses').run();
+      db.prepare('DELETE FROM tenants').run();
+      db.prepare('DELETE FROM rooms').run();
+
+      // 3. Restore rooms
+      if (Array.isArray(rooms) && rooms.length > 0) {
+        const insRoom = db.prepare(`
+          INSERT INTO rooms (id, name, floor, basePrice, wifiFee, status, area, description, notes)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        rooms.forEach(r => {
+          insRoom.run(r.id, r.name, r.floor || 1, r.basePrice || 1500000, r.wifiFee || 50000, r.status || 'AVAILABLE', r.area || 18, r.description || '', r.notes || '');
+        });
+      }
+
+      // 4. Restore tenants
+      if (Array.isArray(tenants) && tenants.length > 0) {
+        const insTenant = db.prepare(`
+          INSERT INTO tenants (
+            id, roomId, fullName, phone, password, idCardNumber, idCardDate, idCardPlace,
+            idCardFrontUrl, idCardBackUrl, dateOfBirth, gender, hometown, licensePlate,
+            startDate, deposit, isRepresentative, status, notes, createdAt
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        tenants.forEach(t => {
+          insTenant.run(
+            t.id, t.roomId, t.fullName, t.phone, t.password || '123',
+            t.idCardNumber || '', t.idCardDate || '', t.idCardPlace || '',
+            t.idCardFrontUrl || '', t.idCardBackUrl || '', t.dateOfBirth || '',
+            t.gender || 'Nam', t.hometown || '', t.licensePlate || '',
+            t.startDate || '', t.deposit || 0, t.isRepresentative !== undefined ? t.isRepresentative : 1,
+            t.status || 'ACTIVE', t.notes || '', t.createdAt || new Date().toISOString()
+          );
+        });
+      }
+
+      // 5. Restore invoices
+      if (Array.isArray(invoices) && invoices.length > 0) {
+        const insInv = db.prepare(`
+          INSERT INTO invoices (
+            id, invoiceCode, roomId, month, roomPrice,
+            oldElectricity, newElectricity, electricityUsage, electricityPrice, electricityCost, electricityMeterPhoto,
+            oldWater, newWater, waterUsage, waterPrice, waterCost, waterMeterPhoto,
+            wifiFee, extraFees, totalExtraFee, discount, totalAmount, paidAmount, remainingAmount,
+            status, dueDate, paidDate, notes, createdAt, updatedAt, rentDueDate, utilityDueDate
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        invoices.forEach(i => {
+          insInv.run(
+            i.id, i.invoiceCode, i.roomId, i.month, i.roomPrice || 0,
+            i.oldElectricity || 0, i.newElectricity || 0, i.electricityUsage || 0, i.electricityPrice || 4000, i.electricityCost || 0, i.electricityMeterPhoto || null,
+            i.oldWater || 0, i.newWater || 0, i.waterUsage || 0, i.waterPrice || 12000, i.waterCost || 0, i.waterMeterPhoto || null,
+            i.wifiFee || 0, i.extraFees || '[]', i.totalExtraFee || 0, i.discount || 0, i.totalAmount || 0, i.paidAmount || 0, i.remainingAmount || 0,
+            i.status || 'UNPAID', i.dueDate || null, i.paidDate || null, i.notes || '', i.createdAt || new Date().toISOString(), i.updatedAt || new Date().toISOString(),
+            i.rentDueDate || null, i.utilityDueDate || null
+          );
+        });
+      }
+
+      // 6. Restore expenses
+      if (Array.isArray(expenses) && expenses.length > 0) {
+        const insExp = db.prepare(`
+          INSERT INTO expenses (id, title, category, amount, date, receiptImageUrl, notes, createdAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        expenses.forEach(e => {
+          insExp.run(e.id, e.title, e.category, e.amount, e.date, e.receiptImageUrl || null, e.notes || '', e.createdAt || new Date().toISOString());
+        });
+      }
+
+      // 7. Restore announcements
+      if (Array.isArray(announcements) && announcements.length > 0) {
+        const insAnn = db.prepare(`
+          INSERT INTO announcements (id, title, content, type, targetType, targetRoomId, startTime, endTime, isPinned, createdAt, createdBy)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        announcements.forEach(a => {
+          insAnn.run(a.id, a.title, a.content, a.type || 'GENERAL', a.targetType || 'ALL', a.targetRoomId || null, a.startTime || null, a.endTime || null, a.isPinned || 1, a.createdAt || new Date().toISOString(), a.createdBy || 'Chủ Trọ');
+        });
+      }
+    });
+
+    restoreTx();
+
+    try {
+      db.pragma('wal_checkpoint(TRUNCATE)');
+    } catch (e) {}
+
+    logAudit('KHÔI_PHỤC_DỮ_LIỆU', 'Đã khôi phục toàn bộ dữ liệu từ bản sao lưu', 'MANAGER', 'Chủ Trọ', null);
+
+    return res.json({ success: true, message: 'Đã khôi phục thành công toàn bộ dữ liệu nhà trọ!' });
+  } catch (err) {
+    console.error('Lỗi khi khôi phục dữ liệu:', err);
+    return res.status(500).json({ success: false, message: 'Lỗi khôi phục: ' + err.message });
+  }
+});
+
+// ----------------------
 // ROOMS
 // ----------------------
 app.get('/api/rooms', (req, res) => {
