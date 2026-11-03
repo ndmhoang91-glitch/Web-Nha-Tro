@@ -404,9 +404,10 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
                 {rooms.map(room => {
-                  const inv = invoices.find(i => i.roomId === room.id);
-                  const isOccupied = room.status === 'OCCUPIED';
-                  const tenant = tenants.find(t => t.roomId === room.id && t.isRepresentative && t.status === 'ACTIVE') || tenants.find(t => t.roomId === room.id && t.status === 'ACTIVE');
+                  const inv = invoices.find(i => Number(i.roomId) === Number(room.id));
+                  const tenant = tenants.find(t => Number(t.roomId) === Number(room.id) && t.isRepresentative && t.status === 'ACTIVE') 
+                    || tenants.find(t => Number(t.roomId) === Number(room.id) && t.status === 'ACTIVE');
+                  const isOccupied = Boolean(tenant) || Number(room.tenantCount) > 0;
                   const schedule = inv?.schedule;
                   const rentDay = schedule?.actualRentDay || (tenant?.startDate ? new Date(tenant.startDate).getDate() : 1);
                   const rentCycleStr = schedule?.rentCycleStr || `Ngày ${rentDay} tháng này ➔ Ngày ${rentDay} tháng sau`;
@@ -597,9 +598,11 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                 </div>
               ) : (
                 rooms.map(room => {
-                // Find invoice for this room
-                const inv = invoices.find(i => i.roomId === room.id);
-                const isOccupied = room.status === 'OCCUPIED';
+                // Find invoice and tenant for this room
+                const inv = invoices.find(i => Number(i.roomId) === Number(room.id));
+                const tenant = tenants.find(t => Number(t.roomId) === Number(room.id) && t.isRepresentative && t.status === 'ACTIVE') 
+                  || tenants.find(t => Number(t.roomId) === Number(room.id) && t.status === 'ACTIVE');
+                const isOccupied = Boolean(tenant) || Number(room.tenantCount) > 0;
 
                 return (
                   <div
@@ -654,15 +657,15 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                           <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-100">
                             <div>
                               <div className="font-bold text-slate-800 text-sm">
-                                {room.representativeName || 'Chưa có thông tin'}
+                                {tenant?.fullName || room.representativeName || 'Chưa có thông tin'}
                               </div>
                               <div className="text-slate-500 text-[11px] flex items-center gap-1 mt-0.5">
                                 <Phone className="w-3 h-3 text-slate-400" />
-                                <span>{room.representativePhone || '---'}</span>
+                                <span>{tenant?.phone || room.representativePhone || '---'}</span>
                               </div>
                             </div>
                             <span className="text-[11px] text-blue-700 bg-blue-50 px-2 py-1 rounded-lg font-semibold">
-                              {room.tenantCount} người ở
+                              {room.tenantCount || 1} người ở
                             </span>
                           </div>
 

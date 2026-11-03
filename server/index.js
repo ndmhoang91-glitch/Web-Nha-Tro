@@ -240,6 +240,14 @@ app.post('/api/system/clear-all-data', (req, res) => {
 // ROOMS
 // ----------------------
 app.get('/api/rooms', (req, res) => {
+  // Auto-sync room status with active tenants
+  try {
+    db.prepare("UPDATE rooms SET status = 'OCCUPIED' WHERE id IN (SELECT DISTINCT roomId FROM tenants WHERE status = 'ACTIVE')").run();
+    db.prepare("UPDATE rooms SET status = 'AVAILABLE' WHERE (status = 'OCCUPIED' OR status IS NULL) AND id NOT IN (SELECT DISTINCT roomId FROM tenants WHERE status = 'ACTIVE')").run();
+  } catch (e) {
+    // ignore
+  }
+
   const rooms = db.prepare(`
     SELECT r.*,
       (SELECT COUNT(*) FROM tenants t WHERE t.roomId = r.id AND t.status = 'ACTIVE') as tenantCount,
@@ -1163,9 +1171,9 @@ app.delete('/api/expenses/:id', (req, res) => {
 app.get('/api/statistics', (req, res) => {
   const month = req.query.month || new Date().toISOString().slice(0, 7);
 
-  // Total rooms and occupied
+  // Total rooms and occupied (synced with actual active tenants)
   const totalRooms = db.prepare('SELECT COUNT(*) as c FROM rooms').get().c;
-  const occupiedRooms = db.prepare("SELECT COUNT(*) as c FROM rooms WHERE status = 'OCCUPIED'").get().c;
+  const occupiedRooms = db.prepare("SELECT COUNT(DISTINCT roomId) as c FROM tenants WHERE status = 'ACTIVE'").get().c;
 
   // Invoices for this month
   const invStats = db.prepare(`

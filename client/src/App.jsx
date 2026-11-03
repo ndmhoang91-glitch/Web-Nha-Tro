@@ -271,6 +271,7 @@ export default function App() {
       {activeTenantModal !== null && (
         <TenantModal
           tenant={activeTenantModal?.id ? activeTenantModal : null}
+          initialRoomId={activeTenantModal?.roomId}
           rooms={rooms}
           onClose={() => setActiveTenantModal(null)}
           onSaved={loadAllData}

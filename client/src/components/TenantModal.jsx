@@ -5,10 +5,15 @@ import { saveTenant } from '../api';
 export default function TenantModal({
   tenant,
   rooms = [],
+  initialRoomId = null,
   onClose,
   onSaved
 }) {
-  const [roomId, setRoomId] = useState(rooms[0]?.id || 1);
+  const [roomId, setRoomId] = useState(() => {
+    if (tenant?.roomId) return tenant.roomId;
+    if (initialRoomId) return initialRoomId;
+    return rooms[0]?.id || 1;
+  });
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('123');
@@ -35,7 +40,7 @@ export default function TenantModal({
 
   useEffect(() => {
     if (tenant) {
-      setRoomId(tenant.roomId || rooms[0]?.id || 1);
+      setRoomId(tenant.roomId || initialRoomId || rooms[0]?.id || 1);
       setFullName(tenant.fullName || '');
       setPhone(tenant.phone || '');
       setPassword(tenant.password || '123');
@@ -53,8 +58,10 @@ export default function TenantModal({
       setNotes(tenant.notes || '');
       setFrontPreview(tenant.idCardFrontUrl || '');
       setBackPreview(tenant.idCardBackUrl || '');
+    } else if (initialRoomId) {
+      setRoomId(initialRoomId);
     }
-  }, [tenant, rooms]);
+  }, [tenant, initialRoomId, rooms]);
 
   const handleFrontChange = (e) => {
     const file = e.target.files[0];
