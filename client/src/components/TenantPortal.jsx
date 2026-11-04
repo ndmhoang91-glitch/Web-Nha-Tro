@@ -4,7 +4,7 @@ import {
   FileText, History, Wrench, ShieldCheck, Copy, Check, Eye, ExternalLink,
   ChevronRight, Calendar, UserCheck, MessageSquare, AlertTriangle, Bell, Zap, Droplet
 } from 'lucide-react';
-import { formatVND, getVietQRUrl, submitProof, submitRequest, fetchRequests } from '../api';
+import { formatVND, getVietQRUrl, submitProof, submitRequest, fetchRequests, fetchInvoices } from '../api';
 import confetti from 'canvas-confetti';
 
 export default function TenantPortal({
@@ -32,9 +32,43 @@ export default function TenantPortal({
   const relevantAnnouncements = announcements.filter(a => a.targetType === 'ALL' || a.targetRoomId === currentRoom?.id);
   const hasOutage = relevantAnnouncements.some(a => a.type === 'OUTAGE_ELECTRIC' || a.type === 'OUTAGE_WATER' || a.type === 'URGENT');
 
-  // Invoices for this room
-  const roomInvoices = invoices.filter(i => i.roomId === currentRoom?.id);
-  const currentInvoice = roomInvoices.find(i => i.month === currentMonth) || roomInvoices[0];
+  // All historical invoices for this room
+  const [allRoomInvoices, setAllRoomInvoices] = useState([]);
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+
+  useEffect(() => {
+    setSelectedMonth(currentMonth);
+  }, [currentMonth]);
+
+  useEffect(() => {
+    if (currentRoom?.id) {
+      fetchInvoices({ roomId: currentRoom.id }).then(res => {
+        if (Array.isArray(res) && res.length > 0) {
+          setAllRoomInvoices(res);
+        }
+      }).catch(console.error);
+    }
+  }, [currentRoom?.id]);
+
+  // Combined room invoices
+  const roomInvoices = allRoomInvoices.length > 0
+    ? allRoomInvoices
+    : invoices.filter(i => i.roomId === currentRoom?.id);
+
+  const currentInvoice = roomInvoices.find(i => i.month === selectedMonth) || roomInvoices.find(i => i.month === currentMonth) || roomInvoices[0];
+
+  const roomRentTotal = (Number(currentInvoice?.roomPrice) || 0) + (Number(currentInvoice?.wifiFee) || 0);
+  const utilitiesTotal = (Number(currentInvoice?.electricityCost) || 0) + (Number(currentInvoice?.waterCost) || 0) + (Number(currentInvoice?.totalExtraFee) || 0) - (Number(currentInvoice?.discount) || 0);
+
+  const isRoomRentPaid = Boolean(currentInvoice && currentInvoice.paidAmount >= roomRentTotal);
+  const isUtilitiesPending = Boolean(currentInvoice && isRoomRentPaid && currentInvoice.remainingAmount > 0);
+  const isAllPaid = Boolean(currentInvoice && (currentInvoice.status === 'PAID' || currentInvoice.remainingAmount <= 0));
+
+  const payAmount = currentInvoice
+    ? (currentInvoice.remainingAmount > 0 ? currentInvoice.remainingAmount : currentInvoice.totalAmount)
+    : 0;
+
+  const memoType = isUtilitiesPending ? 'DIEN NUOC' : 'TIEN TRO';
 
   // Proofs submitted for this room
   const roomProofs = proofs.filter(p => p.roomId === currentRoom?.id);
@@ -149,8 +183,8 @@ export default function TenantPortal({
     settings.bankName,
     settings.bankAccount,
     settings.bankOwner,
-    currentInvoice.remainingAmount > 0 ? currentInvoice.remainingAmount : currentInvoice.totalAmount,
-    `${currentRoom?.name?.replace(/[^0-9]/g, 'P')} TIEN TRO T${currentInvoice?.month?.replace('-', '')}`
+    payAmount,
+    `${currentRoom?.name?.replace(/[^0-9]/g, 'P') || 'P'} ${memoType} T${currentInvoice?.month?.replace('-', '')}`
   ) : '';
 
   return (
@@ -321,37 +355,112 @@ export default function TenantPortal({
           
           {currentInvoice ? (
             <>
+              {/* Quick Month Switcher for Room Invoices */}
+              {roomInvoices.length > 1 && (
+                <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-2xs flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-xs text-slate-700 font-bold">
+                    <Calendar className="w-4 h-4 text-emerald-600" />
+                    <span>Chọn kỳ hóa đơn phòng:</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {roomInvoices.map(inv => {
+                      const invRoomRent = (Number(inv.roomPrice) || 0) + (Number(inv.wifiFee) || 0);
+                      const invPaid = Boolean(inv.status === 'PAID' || inv.remainingAmount <= 0);
+                      const invRoomPaid = Boolean(inv.paidAmount >= invRoomRent && inv.remainingAmount > 0);
+                      const isCurrentActive = inv.month === (currentInvoice?.month);
+
+                      return (
+                        <button
+                          key={inv.id}
+                          type="button"
+                          onClick={() => setSelectedMonth(inv.month)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            isCurrentActive
+                              ? 'bg-emerald-800 text-white shadow-xs'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                          }`}
+                        >
+                          <span>Tháng {inv.month?.slice(5)}/{inv.month?.slice(0, 4)}</span>
+                          <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                            invPaid
+                              ? (isCurrentActive ? 'bg-emerald-700 text-emerald-100' : 'bg-emerald-100 text-emerald-800')
+                              : invRoomPaid
+                              ? (isCurrentActive ? 'bg-amber-400 text-amber-950 font-black' : 'bg-amber-100 text-amber-900')
+                              : (isCurrentActive ? 'bg-rose-400 text-rose-950 font-black' : 'bg-rose-100 text-rose-800')
+                          }`}>
+                            {invPaid
+                              ? '✓ Đã xong'
+                              : invRoomPaid
+                              ? `⚡ Điện Nước: ${formatVND(inv.remainingAmount)}`
+                              : `🏠 Tiền Phòng: ${formatVND(inv.remainingAmount)}`}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Payment Status Alert Banner */}
               <div className={`rounded-2xl p-4 sm:p-5 border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
-                currentInvoice.status === 'PAID'
+                isAllPaid
                   ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
                   : currentInvoice.status === 'PENDING_APPROVAL'
                   ? 'bg-amber-50 border-amber-300 text-amber-900'
+                  : isUtilitiesPending
+                  ? 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-300 text-amber-950 shadow-xs'
                   : 'bg-rose-50 border-rose-300 text-rose-900'
               }`}>
                 <div className="flex items-center gap-3">
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
-                    currentInvoice.status === 'PAID'
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-xs ${
+                    isAllPaid
                       ? 'bg-emerald-600 text-white'
                       : currentInvoice.status === 'PENDING_APPROVAL'
                       ? 'bg-amber-500 text-white animate-pulse'
+                      : isUtilitiesPending
+                      ? 'bg-gradient-to-tr from-amber-500 to-orange-500 text-white'
                       : 'bg-rose-600 text-white'
                   }`}>
-                    {currentInvoice.status === 'PAID' ? <CheckCircle2 className="w-7 h-7" /> : currentInvoice.status === 'PENDING_APPROVAL' ? <Clock className="w-7 h-7" /> : <AlertTriangle className="w-7 h-7" />}
+                    {isAllPaid ? (
+                      <CheckCircle2 className="w-7 h-7" />
+                    ) : currentInvoice.status === 'PENDING_APPROVAL' ? (
+                      <Clock className="w-7 h-7" />
+                    ) : isUtilitiesPending ? (
+                      <Zap className="w-7 h-7" />
+                    ) : (
+                      <AlertTriangle className="w-7 h-7" />
+                    )}
                   </div>
                   <div>
-                    <div className="text-xs font-bold uppercase tracking-wider">
-                      {currentInvoice.status === 'PAID' ? '✓ Đã Thanh Toán Hoàn Tất' : currentInvoice.status === 'PENDING_APPROVAL' ? '⏳ Đang Chờ Chủ Trọ Đối Soát Tiền' : '⚠️ Cần Thanh Toán Tiền Trọ'}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider">
+                        {isAllPaid
+                          ? '✓ Đã Thanh Toán Hoàn Tất'
+                          : currentInvoice.status === 'PENDING_APPROVAL'
+                          ? '⏳ Đang Chờ Chủ Trọ Đối Soát Tiền'
+                          : isUtilitiesPending
+                          ? '⚡ Cần Thanh Toán Tiền Điện & Nước (Chốt Ngày 1 Tây)'
+                          : '⚠️ Cần Thanh Toán Tiền Trọ Theo Hợp Đồng'}
+                      </span>
+                      {isUtilitiesPending && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                          ✓ Tiền phòng đã đóng ngày {currentInvoice.paidDate ? new Date(currentInvoice.paidDate).toLocaleDateString('vi-VN') : 'theo HĐ'}
+                        </span>
+                      )}
                     </div>
                     <div className="text-xl sm:text-2xl font-black mt-0.5">
-                      {currentInvoice.status === 'PAID' ? formatVND(currentInvoice.totalAmount) : `Còn phải nộp: ${formatVND(currentInvoice.remainingAmount)}`}
+                      {isAllPaid
+                        ? formatVND(currentInvoice.totalAmount)
+                        : `Còn phải nộp: ${formatVND(currentInvoice.remainingAmount)}`}
                     </div>
-                    <p className="text-xs opacity-80 mt-0.5">
-                      {currentInvoice.status === 'PAID'
+                    <p className="text-xs opacity-90 mt-0.5">
+                      {isAllPaid
                         ? `Hoàn tất lúc: ${currentInvoice.paidDate || 'Hôm nay'}. Đã lưu chứng từ đối soát an toàn.`
                         : currentInvoice.status === 'PENDING_APPROVAL'
                         ? 'Bạn đã tải lên biên lai chuyển khoản. Chủ trọ đang kiểm tra biến động số dư tài khoản để duyệt.'
-                        : `Kỳ thanh toán Tháng ${currentInvoice.month?.slice(5)}/${currentInvoice.month?.slice(0, 4)} • Hạn đóng trước ngày ${currentInvoice.dueDate || '05'}`}
+                        : isUtilitiesPending
+                        ? `Kỳ Tháng ${currentInvoice.month?.slice(5)}/${currentInvoice.month?.slice(0, 4)}: Tiền phòng đã thanh toán đủ. Đây là tiền điện (chốt 1/11: ${currentInvoice.electricityUsage} kWh) & nước (chốt 20/10: ${currentInvoice.waterUsage} m³) thu vào đầu tháng ngày 1 Tây.`
+                        : `Kỳ thanh toán Tháng ${currentInvoice.month?.slice(5)}/${currentInvoice.month?.slice(0, 4)} • Hạn đóng ngày ${currentInvoice.rentDueDay || 1} hàng tháng theo HĐ`}
                     </p>
                   </div>
                 </div>
@@ -382,9 +491,20 @@ export default function TenantPortal({
                 <div className="space-y-3 text-xs">
                   
                   {/* 1. Tiền phòng */}
-                  <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                  <div className={`flex items-center justify-between p-3 rounded-xl border ${
+                    isRoomRentPaid
+                      ? 'bg-emerald-50/50 border-emerald-200'
+                      : 'bg-slate-50 border-slate-100'
+                  }`}>
                     <div>
-                      <span className="font-bold text-slate-800 block text-sm">1. Tiền thuê phòng trọ</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-800 block text-sm">1. Tiền thuê phòng trọ</span>
+                        {isRoomRentPaid && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            ✓ Đã đóng theo HĐ {currentInvoice.paidDate ? `(${new Date(currentInvoice.paidDate).toLocaleDateString('vi-VN')})` : ''}
+                          </span>
+                        )}
+                      </div>
                       <span className="text-blue-700 text-[11px] font-medium block">
                         Kỳ: {currentInvoice.rentCycleStr || (currentInvoice.schedule?.rentCycleStr) || '1 tháng'} • Thu ngày {currentInvoice.rentDueDay || 1} hàng tháng
                       </span>
@@ -399,6 +519,9 @@ export default function TenantPortal({
                         <span>2. Tiền điện sinh hoạt</span>
                         <span className="bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0.2 rounded-sm font-semibold">4.000 đ/kW</span>
                         <span className="bg-white text-amber-900 text-[10px] px-1.5 py-0.2 rounded-sm border border-amber-200">Chốt ngày 1 Tây</span>
+                        {isUtilitiesPending && (
+                          <span className="bg-amber-200 text-amber-950 text-[10px] px-1.5 py-0.2 rounded-sm font-bold">⚡ Cần nộp</span>
+                        )}
                       </div>
                       <span className="text-slate-600 text-[11px] font-mono">
                         Số cũ: <strong>{currentInvoice.oldElectricity}</strong> ➔ Số mới: <strong>{currentInvoice.newElectricity}</strong> = <strong className="text-amber-800">{currentInvoice.electricityUsage} kWh</strong>
@@ -413,7 +536,10 @@ export default function TenantPortal({
                       <div className="flex items-center gap-1.5 font-bold text-cyan-900 text-sm">
                         <span>3. Tiền nước sinh hoạt</span>
                         <span className="bg-cyan-100 text-cyan-800 text-[10px] px-1.5 py-0.2 rounded-sm font-semibold">12.000 đ/khối</span>
-                        <span className="bg-white text-cyan-900 text-[10px] px-1.5 py-0.2 rounded-sm border border-cyan-200">Chốt ngày 1 Tây</span>
+                        <span className="bg-white text-cyan-900 text-[10px] px-1.5 py-0.2 rounded-sm border border-cyan-200">Chốt ngày 20 Tây</span>
+                        {isUtilitiesPending && (
+                          <span className="bg-cyan-200 text-cyan-950 text-[10px] px-1.5 py-0.2 rounded-sm font-bold">💧 Cần nộp</span>
+                        )}
                       </div>
                       <span className="text-slate-600 text-[11px] font-mono">
                         Số cũ: <strong>{currentInvoice.oldWater}</strong> ➔ Số mới: <strong>{currentInvoice.newWater}</strong> = <strong className="text-cyan-800">{currentInvoice.waterUsage} m³</strong>
@@ -423,9 +549,20 @@ export default function TenantPortal({
                   </div>
 
                   {/* 4. Wifi */}
-                  <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                  <div className={`flex items-center justify-between p-3 rounded-xl border ${
+                    isRoomRentPaid
+                      ? 'bg-emerald-50/50 border-emerald-200'
+                      : 'bg-slate-50 border-slate-100'
+                  }`}>
                     <div>
-                      <span className="font-bold text-slate-800 block text-sm">4. Phí mạng Internet / Wifi</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-800 block text-sm">4. Phí mạng Internet / Wifi</span>
+                        {isRoomRentPaid && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            ✓ Đã đóng theo HĐ
+                          </span>
+                        )}
+                      </div>
                       <span className="text-slate-500 text-[11px]">Cáp quang tốc độ cao chia phòng</span>
                     </div>
                     <span className="text-sm font-black text-slate-900">{formatVND(currentInvoice.wifiFee)}</span>
@@ -450,10 +587,28 @@ export default function TenantPortal({
                     </div>
                   )}
 
-                  {/* Total */}
-                  <div className="flex items-center justify-between p-4 rounded-xl bg-slate-900 text-white">
-                    <span className="font-bold text-sm uppercase tracking-wider">Tổng cộng chi phí:</span>
-                    <span className="text-xl font-black text-amber-300">{formatVND(currentInvoice.totalAmount)}</span>
+                  {/* Total & Paid Breakdown */}
+                  <div className="p-4 rounded-xl bg-slate-900 text-white space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-sm uppercase tracking-wider text-slate-300">Tổng cộng chi phí kỳ này:</span>
+                      <span className="text-xl font-black text-amber-300">{formatVND(currentInvoice.totalAmount)}</span>
+                    </div>
+
+                    {currentInvoice.paidAmount > 0 && (
+                      <div className="flex items-center justify-between text-xs text-emerald-400 font-semibold pt-1 border-t border-slate-800">
+                        <span>Đã thanh toán (Tiền phòng & Wifi theo HĐ):</span>
+                        <span className="font-mono font-bold">-{formatVND(currentInvoice.paidAmount)}</span>
+                      </div>
+                    )}
+
+                    {currentInvoice.remainingAmount > 0 && currentInvoice.paidAmount > 0 && (
+                      <div className="flex items-center justify-between text-sm text-rose-300 font-black pt-1 border-t border-slate-700">
+                        <span className="uppercase tracking-wide text-xs">
+                          {isUtilitiesPending ? '⚡ Còn phải nộp (Điện & Nước chốt 1 Tây):' : 'Còn phải nộp:'}
+                        </span>
+                        <span className="text-base text-rose-400 font-black">{formatVND(currentInvoice.remainingAmount)}</span>
+                      </div>
+                    )}
                   </div>
 
                 </div>
@@ -466,10 +621,12 @@ export default function TenantPortal({
                     <div>
                       <h4 className="font-bold text-slate-900 text-base flex items-center gap-2">
                         <QrCode className="w-5 h-5 text-blue-600" />
-                        Quét Mã QR Chuyển Khoản Tự Động (VietQR)
+                        Quét Mã QR Chuyển Khoản Tự Động (VietQR) - {isUtilitiesPending ? 'Tiền Điện & Nước (1 Tây)' : 'Tiền Trọ Theo HĐ'}
                       </h4>
                       <p className="text-xs text-slate-500">
-                        Chỉ cần mở app ngân hàng bất kỳ (Momo, Vietcombank, MB, Techcombank...) quét mã để thanh toán đúng số tiền và cú pháp
+                        {isUtilitiesPending
+                          ? 'Tiền phòng đã đóng đủ. Quét mã QR dưới đây để thanh toán riêng tiền điện nước chốt ngày 1 Tây.'
+                          : 'Chỉ cần mở app ngân hàng bất kỳ (Momo, Vietcombank, MB, Techcombank...) quét mã để thanh toán đúng số tiền và cú pháp'}
                       </p>
                     </div>
                   </div>
@@ -505,13 +662,15 @@ export default function TenantPortal({
                         <div className="flex items-center justify-between pt-1 border-t border-slate-100">
                           <span className="text-slate-500">Nội dung chuyển khoản:</span>
                           <strong className="font-mono text-emerald-700 font-bold">
-                            {currentRoom?.name?.replace(/[^0-9]/g, 'P')} TIEN TRO T{currentInvoice?.month?.replace('-', '')}
+                            {currentRoom?.name?.replace(/[^0-9]/g, 'P') || 'P'} {memoType} T{currentInvoice?.month?.replace('-', '')}
                           </strong>
                         </div>
                         <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                          <span className="text-slate-500">Số tiền chuyển:</span>
+                          <span className="text-slate-500">
+                            {isUtilitiesPending ? 'Số tiền chuyển (Điện Nước):' : 'Số tiền chuyển:'}
+                          </span>
                           <strong className="text-rose-600 font-black text-sm">
-                            {formatVND(currentInvoice.remainingAmount > 0 ? currentInvoice.remainingAmount : currentInvoice.totalAmount)}
+                            {formatVND(payAmount)}
                           </strong>
                         </div>
                       </div>

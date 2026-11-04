@@ -18,17 +18,27 @@ export default function InvoiceModal({
   const roomRentTotal = (Number(invoice.roomPrice) || 0) + (Number(invoice.wifiFee) || 0);
   const utilitiesTotal = (Number(invoice.electricityCost) || 0) + (Number(invoice.waterCost) || 0) + (Number(invoice.totalExtraFee) || 0) - (Number(invoice.discount) || 0);
 
+  // Số tiền điện nước và tiền phòng còn lại cần thu
+  const utilitiesRemaining = Math.max(0, Math.min(utilitiesTotal, invoice.remainingAmount));
+  const roomRentRemaining = Math.max(0, Math.min(roomRentTotal, invoice.remainingAmount > utilitiesTotal ? invoice.remainingAmount - utilitiesTotal : (roomRentTotal - invoice.paidAmount)));
+
   const displayTotal = viewMode === 'ROOM_ONLY'
     ? roomRentTotal
     : viewMode === 'UTILITIES_ONLY'
     ? Math.max(0, utilitiesTotal)
     : invoice.totalAmount;
 
-  // Tính số tiền cần thanh toán cho từng chế độ
-  const displayRemaining = viewMode === 'ROOM_ONLY'
-    ? (invoice.paidAmount >= roomRentTotal ? 0 : roomRentTotal - invoice.paidAmount)
+  // Số đã thanh toán và còn nợ tương ứng với chế độ xem
+  const paidForView = viewMode === 'ROOM_ONLY'
+    ? Math.min(roomRentTotal, invoice.paidAmount)
     : viewMode === 'UTILITIES_ONLY'
-    ? (invoice.paidAmount >= invoice.totalAmount ? 0 : Math.max(0, invoice.remainingAmount))
+    ? Math.max(0, utilitiesTotal - utilitiesRemaining)
+    : invoice.paidAmount;
+
+  const displayRemaining = viewMode === 'ROOM_ONLY'
+    ? roomRentRemaining
+    : viewMode === 'UTILITIES_ONLY'
+    ? utilitiesRemaining
     : invoice.remainingAmount;
 
   const qrAmount = displayRemaining > 0 ? displayRemaining : displayTotal;
@@ -120,10 +130,10 @@ Cảm ơn anh/chị!`;
     let label = 'toàn bộ hóa đơn';
 
     if (type === 'ROOM_ONLY') {
-      amountToPay = invoice.paidAmount >= roomRentTotal ? 0 : roomRentTotal - invoice.paidAmount;
+      amountToPay = roomRentRemaining > 0 ? roomRentRemaining : roomRentTotal;
       label = `tiền phòng (${formatVND(amountToPay)})`;
     } else if (type === 'UTILITIES_ONLY') {
-      amountToPay = invoice.remainingAmount;
+      amountToPay = utilitiesRemaining > 0 ? utilitiesRemaining : utilitiesTotal;
       label = `tiền điện nước (${formatVND(amountToPay)})`;
     }
 
@@ -179,17 +189,17 @@ Cảm ơn anh/chị!`;
       </tr>
     ` : '';
 
-    const paidRow = invoice.paidAmount > 0 ? `
+    const paidRow = paidForView > 0 ? `
       <tr style="background: #f8fafc;">
-        <td colspan="4" style="padding: 8px; text-align: right; font-weight: bold; color: #16a34a; border: 1px solid #cbd5e1;">Đã thanh toán:</td>
-        <td style="padding: 8px; text-align: right; font-weight: bold; color: #16a34a; border: 1px solid #cbd5e1;">${formatVND(invoice.paidAmount)}</td>
+        <td colspan="4" style="padding: 8px; text-align: right; font-weight: bold; color: #16a34a; border: 1px solid #cbd5e1;">${viewMode === 'ROOM_ONLY' ? 'Đã thu tiền phòng:' : viewMode === 'UTILITIES_ONLY' ? 'Đã thu tiền điện nước:' : 'Đã thanh toán:'}</td>
+        <td style="padding: 8px; text-align: right; font-weight: bold; color: #16a34a; border: 1px solid #cbd5e1;">${formatVND(paidForView)}</td>
       </tr>
     ` : '';
 
-    const remainingRow = (invoice.remainingAmount > 0 && invoice.paidAmount > 0) ? `
+    const remainingRow = displayRemaining > 0 ? `
       <tr style="background: #fff1f2;">
-        <td colspan="4" style="padding: 8px; text-align: right; font-weight: bold; color: #e11d48; border: 1px solid #cbd5e1;">Còn nợ lại:</td>
-        <td style="padding: 8px; text-align: right; font-weight: bold; color: #e11d48; border: 1px solid #cbd5e1;">${formatVND(invoice.remainingAmount)}</td>
+        <td colspan="4" style="padding: 8px; text-align: right; font-weight: bold; color: #e11d48; border: 1px solid #cbd5e1;">${viewMode === 'ROOM_ONLY' ? 'Còn nợ tiền phòng:' : viewMode === 'UTILITIES_ONLY' ? 'Còn nợ tiền điện nước:' : 'Còn nợ lại:'}</td>
+        <td style="padding: 8px; text-align: right; font-weight: bold; color: #e11d48; border: 1px solid #cbd5e1;">${formatVND(displayRemaining)}</td>
       </tr>
     ` : '';
 
@@ -589,20 +599,20 @@ Cảm ơn anh/chị!`;
                     {formatVND(displayTotal)}
                   </td>
                 </tr>
-                {invoice.paidAmount > 0 && (
+                {paidForView > 0 && (
                   <tr className="bg-slate-100 text-xs">
                     <td colSpan={4} className="p-2 text-right font-semibold text-slate-600">
-                      Đã thanh toán:
+                      {viewMode === 'ROOM_ONLY' ? 'Đã thu tiền phòng:' : viewMode === 'UTILITIES_ONLY' ? 'Đã thu tiền điện nước:' : 'Đã thanh toán:'}
                     </td>
                     <td className="p-2 text-right font-bold text-emerald-600">
-                      {formatVND(invoice.paidAmount)}
+                      {formatVND(paidForView)}
                     </td>
                   </tr>
                 )}
-                {displayRemaining > 0 && invoice.paidAmount > 0 && (
+                {displayRemaining > 0 && (
                   <tr className="bg-rose-50 text-xs">
                     <td colSpan={4} className="p-2 text-right font-bold text-rose-700">
-                      Còn nợ lại:
+                      {viewMode === 'ROOM_ONLY' ? 'Còn nợ tiền phòng:' : viewMode === 'UTILITIES_ONLY' ? 'Còn nợ tiền điện nước:' : 'Còn nợ lại:'}
                     </td>
                     <td className="p-2 text-right font-black text-rose-600">
                       {formatVND(displayRemaining)}
@@ -739,7 +749,7 @@ Cảm ơn anh/chị!`;
             {invoice.status !== 'PAID' && (
               <>
                 {viewMode === 'ROOM_ONLY' ? (
-                  invoice.paidAmount >= roomRentTotal ? (
+                  roomRentRemaining <= 0 && invoice.paidAmount >= roomRentTotal ? (
                     <span className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800">
                       <Check className="w-4 h-4" /> Đã thu đủ tiền phòng
                     </span>
@@ -751,11 +761,11 @@ Cảm ơn anh/chị!`;
                       className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors cursor-pointer"
                     >
                       <Check className="w-4 h-4" />
-                      {quickPaying ? 'Đang xử lý...' : `Xác Nhận Thu Tiền Phòng (${formatVND(roomRentTotal - (invoice.paidAmount || 0))})`}
+                      {quickPaying ? 'Đang xử lý...' : `Xác Nhận Thu Tiền Phòng (${formatVND(roomRentRemaining > 0 ? roomRentRemaining : roomRentTotal)})`}
                     </button>
                   )
                 ) : viewMode === 'UTILITIES_ONLY' ? (
-                  invoice.remainingAmount <= 0 ? (
+                  utilitiesRemaining <= 0 && invoice.paidAmount >= invoice.totalAmount ? (
                     <span className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800">
                       <Check className="w-4 h-4" /> Đã thu đủ điện nước
                     </span>
@@ -767,7 +777,7 @@ Cảm ơn anh/chị!`;
                       className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors cursor-pointer"
                     >
                       <Check className="w-4 h-4" />
-                      {quickPaying ? 'Đang xử lý...' : `Xác Nhận Thu Điện Nước (${formatVND(invoice.remainingAmount)})`}
+                      {quickPaying ? 'Đang xử lý...' : `Xác Nhận Thu Điện Nước (${formatVND(utilitiesRemaining > 0 ? utilitiesRemaining : utilitiesTotal)})`}
                     </button>
                   )
                 ) : (
