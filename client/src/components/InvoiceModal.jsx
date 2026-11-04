@@ -16,11 +16,37 @@ export default function InvoiceModal({
   if (!invoice) return null;
 
   const roomRentTotal = (Number(invoice.roomPrice) || 0) + (Number(invoice.wifiFee) || 0);
-  const utilitiesTotal = (Number(invoice.electricityCost) || 0) + (Number(invoice.waterCost) || 0) + (Number(invoice.totalExtraFee) || 0) - (Number(invoice.discount) || 0);
+  const utilitiesTotal = Math.max(0, (Number(invoice.electricityCost) || 0) + (Number(invoice.waterCost) || 0) + (Number(invoice.totalExtraFee) || 0) - (Number(invoice.discount) || 0));
+  const paid = Number(invoice.paidAmount) || 0;
+  const total = Number(invoice.totalAmount) || (roomRentTotal + utilitiesTotal);
+  const remaining = Number(invoice.remainingAmount) !== undefined ? Number(invoice.remainingAmount) : Math.max(0, total - paid);
 
-  // Số tiền điện nước và tiền phòng còn lại cần thu
-  const utilitiesRemaining = Math.max(0, Math.min(utilitiesTotal, invoice.remainingAmount));
-  const roomRentRemaining = Math.max(0, Math.min(roomRentTotal, invoice.remainingAmount > utilitiesTotal ? invoice.remainingAmount - utilitiesTotal : (roomRentTotal - invoice.paidAmount)));
+  // Số tiền điện nước và tiền phòng còn lại cần thu tính toán chính xác
+  let roomRentRemaining = roomRentTotal;
+  let utilitiesRemaining = utilitiesTotal;
+
+  if (paid >= total || remaining <= 0) {
+    roomRentRemaining = 0;
+    utilitiesRemaining = 0;
+  } else if (paid === 0) {
+    roomRentRemaining = roomRentTotal;
+    utilitiesRemaining = utilitiesTotal;
+  } else if (paid === roomRentTotal) {
+    roomRentRemaining = 0;
+    utilitiesRemaining = utilitiesTotal;
+  } else if (paid === utilitiesTotal) {
+    roomRentRemaining = roomRentTotal;
+    utilitiesRemaining = 0;
+  } else if (paid >= roomRentTotal) {
+    roomRentRemaining = 0;
+    utilitiesRemaining = Math.max(0, total - paid);
+  } else if (paid <= utilitiesTotal) {
+    utilitiesRemaining = Math.max(0, utilitiesTotal - paid);
+    roomRentRemaining = roomRentTotal;
+  } else {
+    utilitiesRemaining = 0;
+    roomRentRemaining = Math.max(0, total - paid);
+  }
 
   const displayTotal = viewMode === 'ROOM_ONLY'
     ? roomRentTotal

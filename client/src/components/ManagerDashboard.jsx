@@ -32,6 +32,7 @@ export default function ManagerDashboard({
   const [activeTab, setActiveTab] = useState('overview'); // overview, invoices, proofs, tenants, cashflow, announcements, settings
   const [batchGenerating, setBatchGenerating] = useState(false);
   const [copiedZaloId, setCopiedZaloId] = useState(null);
+  const [scheduleViewMode, setScheduleViewMode] = useState('timeline'); // 'timeline' (gọn gàng, thanh việc cần làm) or 'cards' (chi tiết 6 phòng)
 
   // Settings form local state
   const [settingsForm, setSettingsForm] = useState({ ...settings });
@@ -429,195 +430,526 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
           )}
 
           {/* Smart Billing Schedule Section: Contract Date Rent vs 1-Tây Utilities */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3 mb-4">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-                  <Calendar className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
-                    Lịch Thu Tiền Phòng & Chốt Điện Nước Tự Động
-                    <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                      Cơ chế chuẩn
-                    </span>
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    🏠 <strong>Tiền phòng:</strong> Thu theo ngày ký HĐ (đúng ngày ký tháng này ➔ thu ngày đó tháng sau) • ⚡ <strong>Điện nước:</strong> Chốt số & thu ngày 1 Tây hàng tháng
-                  </p>
-                </div>
-              </div>
-              <div className="text-xs text-slate-500 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-blue-600" />
-                <span>Hôm nay: <strong>{new Date().toLocaleDateString('vi-VN')}</strong></span>
-              </div>
-            </div>
+          {(() => {
+            const todayDate = new Date();
+            const currentDayNum = todayDate.getDate();
 
-            {/* Room Schedule Cards */}
-            {rooms.length === 0 ? (
-              <div className="text-center py-6 text-slate-400 text-xs">
-                Chưa có phòng trọ nào. Hãy thêm phòng mới để bắt đầu thiết lập lịch thu tiền!
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-                {rooms.map(room => {
-                  const inv = invoices.find(i => Number(i.roomId) === Number(room.id));
-                  const tenant = tenants.find(t => Number(t.roomId) === Number(room.id) && t.isRepresentative && t.status === 'ACTIVE') 
-                    || tenants.find(t => Number(t.roomId) === Number(room.id) && t.status === 'ACTIVE');
-                  const tenantInMonth = tenant && (!currentMonth || !tenant.startDate || tenant.startDate.slice(0, 7) <= currentMonth) ? tenant : null;
-                  const isOccupied = Boolean(tenantInMonth);
-                  const schedule = inv?.schedule;
-                  const rentDay = schedule?.actualRentDay || (tenantInMonth?.startDate ? new Date(tenantInMonth.startDate).getDate() : 1);
-                  const rentCycleStr = schedule?.rentCycleStr || `Ngày ${rentDay} tháng này ➔ Ngày ${rentDay} tháng sau`;
-                  const isPaid = inv?.status === 'PAID' || (inv && Number(inv.remainingAmount) <= 0 && Number(inv.paidAmount) > 0);
-                  const isPending = inv?.status === 'PENDING_APPROVAL';
-                  const roomRentTotal = (Number(inv?.roomPrice) || (room.basePrice || 1500000)) + (Number(inv?.wifiFee) || (room.wifiFee || 50000));
-                  const isRoomPaid = Boolean(inv && Number(inv.paidAmount) >= roomRentTotal && Number(inv.remainingAmount) > 0);
+            // Nhóm và tính toán số liệu các phòng
+            const roomScheduleMap = {};
+            const activeRoomsData = rooms.map(room => {
+              const inv = invoices.find(i => Number(i.roomId) === Number(room.id));
+              const tenant = tenants.find(t => Number(t.roomId) === Number(room.id) && t.isRepresentative && t.status === 'ACTIVE') 
+                || tenants.find(t => Number(t.roomId) === Number(room.id) && t.status === 'ACTIVE');
+              const tenantInMonth = tenant && (!currentMonth || !tenant.startDate || tenant.startDate.slice(0, 7) <= currentMonth) ? tenant : null;
+              const isOccupied = Boolean(tenantInMonth);
+              const schedule = inv?.schedule;
+              const rentDay = schedule?.actualRentDay || (tenantInMonth?.startDate ? new Date(tenantInMonth.startDate).getDate() : 1);
+              const roomRentTotal = (Number(inv?.roomPrice) || (room.basePrice || 1500000)) + (Number(inv?.wifiFee) || (room.wifiFee || 50000));
+              const isPaid = inv?.status === 'PAID' || (inv && Number(inv.remainingAmount) <= 0 && Number(inv.paidAmount) > 0);
+              const isRoomPaid = isPaid || Boolean(inv && Number(inv.paidAmount) >= roomRentTotal);
+              const diffDays = schedule?.diffDays ?? 0;
+              const isOverdue = isOccupied && !isRoomPaid && diffDays < 0;
+              const isDueToday = isOccupied && !isRoomPaid && diffDays === 0;
 
-                  return (
-                    <div
-                      key={room.id}
-                      className={`rounded-xl border p-3.5 flex flex-col justify-between transition-all ${
-                        isPaid
-                          ? 'bg-emerald-50/40 border-emerald-200'
-                          : isRoomPaid
-                          ? 'bg-amber-50/40 border-amber-200'
-                          : isOccupied
-                          ? 'bg-slate-50/70 border-slate-200 hover:border-blue-300'
-                          : 'bg-slate-50/30 border-dashed border-slate-200'
-                      }`}
-                    >
-                      <div>
-                        {/* Header: Room Name & Status */}
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-slate-900 text-sm">{room.name}</span>
-                            <span className="text-[10px] bg-white border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-mono">
-                              T{room.floor}
-                            </span>
+              return {
+                room,
+                inv,
+                tenant: tenantInMonth,
+                isOccupied,
+                schedule,
+                rentDay,
+                roomRentTotal,
+                isPaid,
+                isRoomPaid,
+                diffDays,
+                isOverdue,
+                isDueToday
+              };
+            });
+
+            // Gom các phòng đang ở theo ngày thu tiền phòng
+            activeRoomsData.filter(r => r.isOccupied).forEach(r => {
+              if (!roomScheduleMap[r.rentDay]) {
+                roomScheduleMap[r.rentDay] = [];
+              }
+              roomScheduleMap[r.rentDay].push(r);
+            });
+
+            // Các phòng cần xử lý gấp (Quá hạn hoặc Hôm nay đến hạn)
+            const urgentRooms = activeRoomsData.filter(r => r.isOverdue || r.isDueToday);
+
+            // Xây dựng danh sách việc cần làm trong tháng (Timeline tasks)
+            const timelineTasks = [];
+
+            // Mốc 1 Tây: Chốt & thu tiền điện nước
+            timelineTasks.push({
+              id: 'task-utilities-1',
+              day: 1,
+              dateStr: `01/${currentMonth ? currentMonth.slice(5) : '11'}`,
+              type: 'UTILITIES',
+              title: '⚡ Chốt & Thu Tiền Điện Nước (1 Tây)',
+              desc: 'Ghi chỉ số điện & thu gộp tiền điện nước cho các phòng',
+              badge: currentDayNum > 1 ? 'Đã qua ngày 1 Tây' : currentDayNum === 1 ? '🔔 Hôm nay 1 Tây!' : 'Sắp tới',
+              badgeColor: currentDayNum === 1 ? 'amber' : 'slate',
+              actionType: 'METER'
+            });
+
+            // Mốc thu tiền phòng theo ngày ký hợp đồng
+            Object.keys(roomScheduleMap).sort((a, b) => Number(a) - Number(b)).forEach(dayKey => {
+              const day = Number(dayKey);
+              const groupRooms = roomScheduleMap[day];
+              const totalGroupAmount = groupRooms.reduce((sum, r) => sum + r.roomRentTotal, 0);
+              const allGroupPaid = groupRooms.every(r => r.isRoomPaid);
+              const anyOverdue = groupRooms.some(r => r.isOverdue);
+              const isToday = currentDayNum === day;
+              const daysDiff = day - currentDayNum;
+
+              let badgeText = '';
+              let badgeColor = 'blue';
+
+              if (allGroupPaid) {
+                badgeText = '✓ Đã thu đủ';
+                badgeColor = 'emerald';
+              } else if (isToday) {
+                badgeText = '🔔 Hôm nay đến hạn!';
+                badgeColor = 'amber';
+              } else if (anyOverdue || daysDiff < 0) {
+                badgeText = `⚠️ Quá hạn ${Math.abs(daysDiff)} ngày!`;
+                badgeColor = 'rose';
+              } else {
+                badgeText = `Còn ${daysDiff} ngày (Hạn ${String(day).padStart(2, '0')}/${currentMonth ? currentMonth.slice(5) : '11'})`;
+                badgeColor = 'blue';
+              }
+
+              timelineTasks.push({
+                id: `task-rent-day-${day}`,
+                day,
+                dateStr: `${String(day).padStart(2, '0')}/${currentMonth ? currentMonth.slice(5) : '11'}`,
+                type: 'RENT',
+                title: `🏠 Thu Tiền Phòng: ${groupRooms.map(r => r.room.name).join(', ')}`,
+                desc: `Kỳ 1 tháng • Thu đúng ngày ${day} hàng tháng theo HĐ`,
+                totalAmount: totalGroupAmount,
+                rooms: groupRooms,
+                allPaid: allGroupPaid,
+                badge: badgeText,
+                badgeColor,
+                isToday
+              });
+            });
+
+            // Mốc 20 Tây: Ghi chỉ số nước
+            timelineTasks.push({
+              id: 'task-water-20',
+              day: 20,
+              dateStr: `20/${currentMonth ? currentMonth.slice(5) : '11'}`,
+              type: 'WATER',
+              title: '💧 Ghi Chỉ Số Nước Định Kỳ (20 Tây)',
+              desc: 'Đi ghi chỉ số đồng hồ nước định kỳ 20 Tây cho toàn bộ nhà trọ',
+              badge: currentDayNum > 20 ? 'Đã qua ngày 20 Tây' : currentDayNum === 20 ? '💧 Hôm nay ghi số nước!' : `Còn ${20 - currentDayNum} ngày`,
+              badgeColor: currentDayNum === 20 ? 'cyan' : 'slate',
+              actionType: 'METER'
+            });
+
+            timelineTasks.sort((a, b) => a.day - b.day);
+
+            const upcomingTask = timelineTasks.find(t => t.day >= currentDayNum && (t.type !== 'RENT' || !t.allPaid));
+
+            return (
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-4">
+                {/* Header with View Toggle */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                      <Calendar className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                        Lịch Trình Việc Cần Làm Trong Tháng {currentMonth?.slice(5)}/{currentMonth?.slice(0, 4)}
+                        <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                          Tự động chuẩn HĐ
+                        </span>
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        🏠 <strong>Tiền phòng:</strong> Thu theo ngày ký HĐ • ⚡ <strong>Điện:</strong> Chốt 1 Tây • 💧 <strong>Nước:</strong> Ghi 20 Tây
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="text-xs text-slate-600 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Hôm nay: <strong>{new Date().toLocaleDateString('vi-VN')}</strong></span>
+                    </div>
+
+                    {/* View Mode Toggle Buttons */}
+                    <div className="inline-flex rounded-xl p-0.5 bg-slate-100 border border-slate-200 text-xs font-semibold">
+                      <button
+                        type="button"
+                        onClick={() => setScheduleViewMode('timeline')}
+                        className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                          scheduleViewMode === 'timeline'
+                            ? 'bg-white text-blue-700 shadow-2xs font-bold'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                        title="Dạng thanh lịch trình việc cần làm gọn gàng, không rối mắt"
+                      >
+                        📋 Lịch Trình Việc Cần Làm
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setScheduleViewMode('cards')}
+                        className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                          scheduleViewMode === 'cards'
+                            ? 'bg-white text-blue-700 shadow-2xs font-bold'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                        title="Dạng thẻ chi tiết 6 phòng"
+                      >
+                        🗂️ Thẻ 6 Phòng
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* VIEW 1: CLEAN TIMELINE (NOTIFICATION BAR & TASK LIST) */}
+                {scheduleViewMode === 'timeline' ? (
+                  <div className="space-y-3">
+                    {/* Top Alert Bar: Urgent Rooms or All Good */}
+                    {urgentRooms.length > 0 ? (
+                      <div className="p-3.5 sm:p-4 rounded-xl bg-amber-50 border border-amber-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
+                            <AlertTriangle className="w-5 h-5 animate-bounce" />
                           </div>
-                          {isOccupied ? (
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                              isPaid
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : isPending
-                                ? 'bg-amber-100 text-amber-800'
-                                : isRoomPaid
-                                ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                                : schedule?.diffDays < 0
-                                ? 'bg-rose-100 text-rose-800'
-                                : 'bg-blue-100 text-blue-800'
-                            }`}>
-                              {isPaid
-                                ? '✓ Đã thu đủ'
-                                : isPending
-                                ? '⏳ Chờ duyệt'
-                                : isRoomPaid
-                                ? `⚡ Chờ điện nước (${formatVND(inv.remainingAmount)})`
-                                : schedule?.rentDueStatusText || 'Chưa đóng'}
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-medium text-slate-400 bg-white px-2 py-0.5 rounded border border-slate-200">
-                              Phòng trống
-                            </span>
-                          )}
+                          <div>
+                            <h4 className="font-bold text-amber-950 text-xs sm:text-sm">
+                              Có {urgentRooms.length} phòng cần thu tiền phòng!
+                            </h4>
+                            <p className="text-[11px] text-amber-800">
+                              {urgentRooms.map(r => `${r.room.name} (${r.tenant?.fullName || 'Khách'}: ${formatVND(r.roomRentTotal)})`).join(' • ')}
+                            </p>
+                          </div>
                         </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {urgentRooms.map(r => r.inv && (
+                            <button
+                              key={r.room.id}
+                              type="button"
+                              onClick={() => onOpenInvoiceModal(r.inv)}
+                              className="px-2.5 py-1 text-xs font-bold rounded-lg bg-amber-600 hover:bg-amber-700 text-white shadow-2xs transition-colors cursor-pointer"
+                            >
+                              Thu {r.room.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-3 sm:p-3.5 rounded-xl bg-emerald-50/80 border border-emerald-200 flex items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-2 text-emerald-900">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>
+                            <strong>Tình hình tốt:</strong> Hiện tại không có phòng nào bị quá hạn!
+                            {upcomingTask && (
+                              <span className="text-slate-600 ml-1.5">
+                                • Việc cần làm tiếp theo: <strong>{upcomingTask.title}</strong> ({upcomingTask.badge})
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    )}
 
-                        {/* Tenant Info */}
-                        {isOccupied && tenant ? (
-                          <div className="text-[11px] text-slate-600 mb-2.5 pb-2 border-b border-slate-200/60 flex items-center justify-between">
-                            <span className="font-semibold text-slate-800 truncate">{tenant.fullName}</span>
-                            <span className="text-slate-500 font-mono text-[10px]">
-                              Ký HĐ: {tenant.startDate ? new Date(tenant.startDate).toLocaleDateString('vi-VN') : 'Chưa nhập'}
-                            </span>
-                          </div>
-                        ) : null}
-
-                        {/* Dual Timelines */}
-                        {isOccupied ? (
-                          <div className="space-y-2 text-xs">
-                            {/* Tiền phòng */}
-                            <div className="bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-2xs">
-                              <div className="flex items-center justify-between">
-                                <span className="font-bold text-slate-800 flex items-center gap-1 text-[11px]">
-                                  <Home className="w-3 h-3 text-blue-600" /> Tiền phòng:
-                                </span>
-                                <span className="font-bold text-blue-700 text-xs">
-                                  {formatVND(roomRentTotal)}
-                                </span>
-                              </div>
-                              <div className="text-[11px] text-slate-600 mt-1 flex items-center justify-between">
-                                <span>Lịch thu:</span>
-                                <strong className="text-blue-800 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
-                                  Ngày {rentDay} hàng tháng
-                                </strong>
-                              </div>
-                              <div className="text-[10px] text-slate-500 mt-1 font-mono truncate" title={rentCycleStr}>
-                                Kỳ: {rentCycleStr}
-                              </div>
+                    {/* Timeline Task Items List */}
+                    <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white">
+                      {timelineTasks.map((task) => (
+                        <div
+                          key={task.id}
+                          className={`p-3.5 sm:p-4 flex flex-col md:flex-row md:items-center justify-between gap-3.5 transition-colors ${
+                            task.isToday
+                              ? 'bg-amber-50/60'
+                              : task.allPaid
+                              ? 'bg-slate-50/40'
+                              : 'hover:bg-slate-50/70'
+                          }`}
+                        >
+                          {/* Left: Date Badge & Details */}
+                          <div className="flex items-start sm:items-center gap-3">
+                            <div className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center shrink-0 border ${
+                              task.isToday
+                                ? 'bg-amber-500 text-white border-amber-600 shadow-xs'
+                                : task.allPaid
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                : task.type === 'UTILITIES'
+                                ? 'bg-amber-100 text-amber-900 border-amber-200'
+                                : task.type === 'WATER'
+                                ? 'bg-cyan-100 text-cyan-900 border-cyan-200'
+                                : 'bg-blue-100 text-blue-900 border-blue-200'
+                            }`}>
+                              <span className="text-[10px] uppercase font-bold tracking-wider leading-none">Ngày</span>
+                              <span className="text-lg font-black leading-tight">{task.day}</span>
                             </div>
 
-                            {/* Tiền điện nước */}
-                            <div className="bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-2xs">
-                              <div className="flex items-center justify-between">
-                                <span className="font-bold text-slate-800 flex items-center gap-1 text-[11px]">
-                                  <Zap className="w-3 h-3 text-amber-500" /> Điện & Nước:
-                                </span>
-                                <span className="font-semibold text-slate-700 text-[11px]">
-                                  {inv ? formatVND((inv.electricityCost || 0) + (inv.waterCost || 0) + (inv.totalExtraFee || 0)) : 'Chưa tính'}
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h4 className="font-bold text-slate-900 text-sm">{task.title}</h4>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                  task.badgeColor === 'emerald'
+                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                    : task.badgeColor === 'amber'
+                                    ? 'bg-amber-100 text-amber-900 border-amber-300 animate-pulse'
+                                    : task.badgeColor === 'rose'
+                                    ? 'bg-rose-100 text-rose-800 border-rose-300'
+                                    : task.badgeColor === 'cyan'
+                                    ? 'bg-cyan-100 text-cyan-900 border-cyan-300'
+                                    : task.badgeColor === 'blue'
+                                    ? 'bg-blue-100 text-blue-800 border-blue-300'
+                                    : 'bg-slate-100 text-slate-600 border-slate-200'
+                                }`}>
+                                  {task.badge}
                                 </span>
                               </div>
-                              <div className="text-[11px] text-slate-600 mt-1 flex items-center justify-between">
-                                <span>Chốt & thu:</span>
-                                <strong className="text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                                  Ngày 1 Tây hàng tháng
-                                </strong>
-                              </div>
-                              {inv && (
-                                <div className="text-[10px] text-slate-500 mt-1 flex items-center justify-between">
-                                  <span>Điện: {inv.electricityUsage} kWh</span>
-                                  <span>Nước: {inv.waterUsage} m³</span>
+                              <p className="text-xs text-slate-500">{task.desc}</p>
+
+                              {/* Interactive Room Pills */}
+                              {task.rooms && task.rooms.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                                  {task.rooms.map(r => (
+                                    <button
+                                      key={r.room.id}
+                                      type="button"
+                                      onClick={() => r.inv && onOpenInvoiceModal(r.inv)}
+                                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${
+                                        r.isPaid
+                                          ? 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100'
+                                          : r.isRoomPaid
+                                          ? 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100'
+                                          : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-blue-300 hover:bg-white'
+                                      }`}
+                                      title="Bấm để xem chi tiết bill và thu tiền"
+                                    >
+                                      <Home className="w-3 h-3 text-blue-600" />
+                                      <span>{r.room.name}: <strong>{r.tenant?.fullName || 'Khách'}</strong></span>
+                                      <span className="font-mono text-slate-500 font-normal">({formatVND(r.roomRentTotal)})</span>
+                                      <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                                        r.isPaid
+                                          ? 'bg-emerald-200 text-emerald-900'
+                                          : r.isRoomPaid
+                                          ? 'bg-amber-200 text-amber-950'
+                                          : 'bg-blue-100 text-blue-800'
+                                      }`}>
+                                        {r.isPaid ? '✓ Đã thu đủ' : r.isRoomPaid ? '✓ Đã thu tiền phòng' : '⏳ Chưa thu'}
+                                      </span>
+                                    </button>
+                                  ))}
                                 </div>
                               )}
                             </div>
                           </div>
-                        ) : (
-                          <div className="py-4 text-center text-xs text-slate-400 italic">
-                            Chưa có khách thuê
-                          </div>
-                        )}
-                      </div>
 
-                      {/* Action footer */}
-                      {isOccupied && (
-                        <div className="mt-3 pt-2 border-t border-slate-200/60 flex items-center justify-between gap-1">
-                          <button
-                            type="button"
-                            onClick={() => onOpenMeterModal(inv || { roomId: room.id, month: currentMonth })}
-                            className="px-2 py-1 text-[11px] font-semibold rounded-md bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 flex items-center gap-1 cursor-pointer"
-                            title="Ghi chỉ số điện nước ngày 1 Tây"
-                          >
-                            <Zap className="w-3 h-3 text-amber-500" /> Số điện nước
-                          </button>
-                          {inv ? (
-                            <button
-                              type="button"
-                              onClick={() => onOpenInvoiceModal(inv)}
-                              className="px-2.5 py-1 text-[11px] font-bold rounded-md bg-blue-600 hover:bg-blue-700 text-white shadow-2xs cursor-pointer"
-                            >
-                              Xem Bill
-                            </button>
-                          ) : (
-                            <span className="text-[10px] text-slate-400 italic">Chưa tạo bill</span>
-                          )}
+                          {/* Right: Total & Action Button */}
+                          <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
+                            {task.totalAmount !== undefined && (
+                              <div className="text-left md:text-right">
+                                <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-semibold">Tổng tiền đợt này</span>
+                                <span className="text-sm sm:text-base font-black text-slate-900">{formatVND(task.totalAmount)}</span>
+                              </div>
+                            )}
+
+                            <div className="flex items-center gap-1.5">
+                              {task.actionType === 'METER' ? (
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenMeterModal(invoices[0] || { roomId: rooms[0]?.id, month: currentMonth })}
+                                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 shadow-2xs transition-all flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Zap className="w-3.5 h-3.5 text-amber-500" /> Ghi Số Điện Nước
+                                </button>
+                              ) : (
+                                task.rooms && task.rooms[0]?.inv && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onOpenInvoiceModal(task.rooms[0].inv)}
+                                    className="px-3 py-1.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs transition-all flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" /> Xem Hóa Đơn
+                                  </button>
+                                )
+                              )}
+                            </div>
+                          </div>
                         </div>
-                      )}
+                      ))}
                     </div>
-                  );
-                })}
+                  </div>
+                ) : (
+                  /* VIEW 2: 6 CARDS GRID */
+                  rooms.length === 0 ? (
+                    <div className="text-center py-6 text-slate-400 text-xs">
+                      Chưa có phòng trọ nào. Hãy thêm phòng mới để bắt đầu thiết lập lịch thu tiền!
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                      {rooms.map(room => {
+                        const inv = invoices.find(i => Number(i.roomId) === Number(room.id));
+                        const tenant = tenants.find(t => Number(t.roomId) === Number(room.id) && t.isRepresentative && t.status === 'ACTIVE') 
+                          || tenants.find(t => Number(t.roomId) === Number(room.id) && t.status === 'ACTIVE');
+                        const tenantInMonth = tenant && (!currentMonth || !tenant.startDate || tenant.startDate.slice(0, 7) <= currentMonth) ? tenant : null;
+                        const isOccupied = Boolean(tenantInMonth);
+                        const schedule = inv?.schedule;
+                        const rentDay = schedule?.actualRentDay || (tenantInMonth?.startDate ? new Date(tenantInMonth.startDate).getDate() : 1);
+                        const rentCycleStr = schedule?.rentCycleStr || `Ngày ${rentDay} tháng này ➔ Ngày ${rentDay} tháng sau`;
+                        const isPaid = inv?.status === 'PAID' || (inv && Number(inv.remainingAmount) <= 0 && Number(inv.paidAmount) > 0);
+                        const isPending = inv?.status === 'PENDING_APPROVAL';
+                        const roomRentTotal = (Number(inv?.roomPrice) || (room.basePrice || 1500000)) + (Number(inv?.wifiFee) || (room.wifiFee || 50000));
+                        const isRoomPaid = Boolean(inv && Number(inv.paidAmount) >= roomRentTotal && Number(inv.remainingAmount) > 0);
+
+                        return (
+                          <div
+                            key={room.id}
+                            className={`rounded-xl border p-3.5 flex flex-col justify-between transition-all ${
+                              isPaid
+                                ? 'bg-emerald-50/40 border-emerald-200'
+                                : isRoomPaid
+                                ? 'bg-amber-50/40 border-amber-200'
+                                : isOccupied
+                                ? 'bg-slate-50/70 border-slate-200 hover:border-blue-300'
+                                : 'bg-slate-50/30 border-dashed border-slate-200'
+                            }`}
+                          >
+                            <div>
+                              {/* Header: Room Name & Status */}
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-bold text-slate-900 text-sm">{room.name}</span>
+                                  <span className="text-[10px] bg-white border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-mono">
+                                    T{room.floor}
+                                  </span>
+                                </div>
+                                {isOccupied ? (
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                    isPaid
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : isPending
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : isRoomPaid
+                                      ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                      : schedule?.diffDays < 0
+                                      ? 'bg-rose-100 text-rose-800'
+                                      : 'bg-blue-100 text-blue-800'
+                                  }`}>
+                                    {isPaid
+                                      ? '✓ Đã thu đủ'
+                                      : isPending
+                                      ? '⏳ Chờ duyệt'
+                                      : isRoomPaid
+                                      ? `⚡ Chờ điện nước (${formatVND(inv.remainingAmount)})`
+                                      : schedule?.rentDueStatusText || 'Chưa đóng'}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-medium text-slate-400 bg-white px-2 py-0.5 rounded border border-slate-200">
+                                    Phòng trống
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Tenant Info */}
+                              {isOccupied && tenant ? (
+                                <div className="text-[11px] text-slate-600 mb-2.5 pb-2 border-b border-slate-200/60 flex items-center justify-between">
+                                  <span className="font-semibold text-slate-800 truncate">{tenant.fullName}</span>
+                                  <span className="text-slate-500 font-mono text-[10px]">
+                                    Ký HĐ: {tenant.startDate ? new Date(tenant.startDate).toLocaleDateString('vi-VN') : 'Chưa nhập'}
+                                  </span>
+                                </div>
+                              ) : null}
+
+                              {/* Dual Timelines */}
+                              {isOccupied ? (
+                                <div className="space-y-2 text-xs">
+                                  {/* Tiền phòng */}
+                                  <div className="bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-2xs">
+                                    <div className="flex items-center justify-between">
+                                      <span className="font-bold text-slate-800 flex items-center gap-1 text-[11px]">
+                                        <Home className="w-3 h-3 text-blue-600" /> Tiền phòng:
+                                      </span>
+                                      <span className="font-bold text-blue-700 text-xs">
+                                        {formatVND(roomRentTotal)}
+                                      </span>
+                                    </div>
+                                    <div className="text-[11px] text-slate-600 mt-1 flex items-center justify-between">
+                                      <span>Lịch thu:</span>
+                                      <strong className="text-blue-800 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                                        Ngày {rentDay} hàng tháng
+                                      </strong>
+                                    </div>
+                                    <div className="text-[10px] text-slate-500 mt-1 font-mono truncate" title={rentCycleStr}>
+                                      Kỳ: {rentCycleStr}
+                                    </div>
+                                  </div>
+
+                                  {/* Tiền điện nước */}
+                                  <div className="bg-white p-2.5 rounded-lg border border-slate-200/80 shadow-2xs">
+                                    <div className="flex items-center justify-between">
+                                      <span className="font-bold text-slate-800 flex items-center gap-1 text-[11px]">
+                                        <Zap className="w-3 h-3 text-amber-500" /> Điện & Nước:
+                                      </span>
+                                      <span className="font-semibold text-slate-700 text-[11px]">
+                                        {inv ? formatVND((inv.electricityCost || 0) + (inv.waterCost || 0) + (inv.totalExtraFee || 0)) : 'Chưa tính'}
+                                      </span>
+                                    </div>
+                                    <div className="text-[11px] text-slate-600 mt-1 flex items-center justify-between">
+                                      <span>Chốt & thu:</span>
+                                      <strong className="text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                        Ngày 1 Tây hàng tháng
+                                      </strong>
+                                    </div>
+                                    {inv && (
+                                      <div className="text-[10px] text-slate-500 mt-1 flex items-center justify-between">
+                                        <span>Điện: {inv.electricityUsage} kWh</span>
+                                        <span>Nước: {inv.waterUsage} m³</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="py-4 text-center text-xs text-slate-400 italic">
+                                  Chưa có khách thuê
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Action footer */}
+                            {isOccupied && (
+                              <div className="mt-3 pt-2 border-t border-slate-200/60 flex items-center justify-between gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenMeterModal(inv || { roomId: room.id, month: currentMonth })}
+                                  className="px-2 py-1 text-[11px] font-semibold rounded-md bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 flex items-center gap-1 cursor-pointer"
+                                  title="Ghi chỉ số điện nước ngày 1 Tây"
+                                >
+                                  <Zap className="w-3 h-3 text-amber-500" /> Số điện nước
+                                </button>
+                                {inv ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => onOpenInvoiceModal(inv)}
+                                    className="px-2.5 py-1 text-[11px] font-bold rounded-md bg-blue-600 hover:bg-blue-700 text-white shadow-2xs cursor-pointer"
+                                  >
+                                    Xem Bill
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] text-slate-400 italic">Chưa tạo bill</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
+                )}
               </div>
-            )}
-          </div>
+            );
+          })()}
 
           {/* 6 Rooms Visual Grid */}
           <div>

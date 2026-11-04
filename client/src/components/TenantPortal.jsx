@@ -35,10 +35,12 @@ export default function TenantPortal({
   // All historical invoices for this room
   const [allRoomInvoices, setAllRoomInvoices] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+  const [showEarlyPayQR, setShowEarlyPayQR] = useState(false);
 
   useEffect(() => {
     setSelectedMonth(currentMonth);
-  }, [currentMonth]);
+    setShowEarlyPayQR(false);
+  }, [currentMonth, currentRoom?.id]);
 
   useEffect(() => {
     if (currentRoom?.id) {
@@ -58,17 +60,35 @@ export default function TenantPortal({
   const currentInvoice = roomInvoices.find(i => i.month === selectedMonth) || roomInvoices.find(i => i.month === currentMonth) || roomInvoices[0];
 
   const roomRentTotal = (Number(currentInvoice?.roomPrice) || 0) + (Number(currentInvoice?.wifiFee) || 0);
-  const utilitiesTotal = (Number(currentInvoice?.electricityCost) || 0) + (Number(currentInvoice?.waterCost) || 0) + (Number(currentInvoice?.totalExtraFee) || 0) - (Number(currentInvoice?.discount) || 0);
+  const utilitiesTotal = Math.max(0, (Number(currentInvoice?.electricityCost) || 0) + (Number(currentInvoice?.waterCost) || 0) + (Number(currentInvoice?.totalExtraFee) || 0) - (Number(currentInvoice?.discount) || 0));
 
-  const isRoomRentPaid = Boolean(currentInvoice && currentInvoice.paidAmount >= roomRentTotal);
-  const isUtilitiesPending = Boolean(currentInvoice && isRoomRentPaid && currentInvoice.remainingAmount > 0);
   const isAllPaid = Boolean(currentInvoice && (currentInvoice.status === 'PAID' || currentInvoice.remainingAmount <= 0));
+  const isRoomRentPaid = Boolean(currentInvoice && (isAllPaid || currentInvoice.paidAmount >= roomRentTotal));
+  const isUtilitiesPending = Boolean(currentInvoice && isRoomRentPaid && currentInvoice.remainingAmount > 0);
+
+  const rentDay = currentInvoice?.rentDueDay || currentInvoice?.schedule?.actualRentDay || (currentTenant?.startDate ? new Date(currentTenant.startDate).getDate() : 1);
+  const diffDays = currentInvoice?.schedule?.diffDays !== undefined
+    ? currentInvoice.schedule.diffDays
+    : (() => {
+        if (!currentInvoice?.month) return 0;
+        const [y, m] = currentInvoice.month.split('-').map(Number);
+        const daysInMonth = new Date(y, m, 0).getDate();
+        const actualD = Math.min(rentDay, daysInMonth);
+        const dueDate = new Date(y, m - 1, actualD);
+        dueDate.setHours(0, 0, 0, 0);
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        return Math.round((dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      })();
+
+  // Chưa đến hạn thanh toán tiền phòng (còn > 0 ngày nữa mới đến ngày ký HĐ)
+  const isBeforeRentDue = Boolean(!isAllPaid && !isRoomRentPaid && diffDays > 0);
 
   const payAmount = currentInvoice
     ? (currentInvoice.remainingAmount > 0 ? currentInvoice.remainingAmount : currentInvoice.totalAmount)
     : 0;
 
-  const memoType = isUtilitiesPending ? 'DIEN NUOC' : 'TIEN TRO';
+  const memoType = isUtilitiesPending ? 'DIEN NUOC' : isBeforeRentDue ? 'TIEN PHONG' : 'TIEN TRO';
 
   // Proofs submitted for this room
   const roomProofs = proofs.filter(p => p.roomId === currentRoom?.id);
@@ -368,6 +388,9 @@ export default function TenantPortal({
                       const invPaid = Boolean(inv.status === 'PAID' || inv.remainingAmount <= 0);
                       const invRoomPaid = Boolean(inv.paidAmount >= invRoomRent && inv.remainingAmount > 0);
                       const isCurrentActive = inv.month === (currentInvoice?.month);
+                      const invDiffDays = inv.schedule?.diffDays ?? 0;
+                      const invIsBeforeRentDue = Boolean(!invPaid && !invRoomPaid && invDiffDays > 0);
+                      const invRentDay = inv.rentDueDay || inv.schedule?.actualRentDay || 1;
 
                       return (
                         <button
@@ -386,12 +409,16 @@ export default function TenantPortal({
                               ? (isCurrentActive ? 'bg-emerald-700 text-emerald-100' : 'bg-emerald-100 text-emerald-800')
                               : invRoomPaid
                               ? (isCurrentActive ? 'bg-amber-400 text-amber-950 font-black' : 'bg-amber-100 text-amber-900')
+                              : invIsBeforeRentDue
+                              ? (isCurrentActive ? 'bg-blue-400 text-blue-950 font-black' : 'bg-blue-100 text-blue-800')
                               : (isCurrentActive ? 'bg-rose-400 text-rose-950 font-black' : 'bg-rose-100 text-rose-800')
                           }`}>
                             {invPaid
                               ? '✓ Đã xong'
                               : invRoomPaid
                               ? `⚡ Điện Nước: ${formatVND(inv.remainingAmount)}`
+                              : invIsBeforeRentDue
+                              ? `⏳ Hạn ${invRentDay}/${inv.month?.slice(5)}: ${formatVND(inv.remainingAmount)}`
                               : `🏠 Tiền Phòng: ${formatVND(inv.remainingAmount)}`}
                           </span>
                         </button>
@@ -407,6 +434,8 @@ export default function TenantPortal({
                   ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
                   : currentInvoice.status === 'PENDING_APPROVAL'
                   ? 'bg-amber-50 border-amber-300 text-amber-900'
+                  : isBeforeRentDue
+                  ? 'bg-linear-to-r from-blue-50/90 to-indigo-50/90 border-blue-200 text-blue-950 shadow-xs'
                   : isUtilitiesPending
                   ? 'bg-gradient-to-r from-amber-50 to-orange-50 border-amber-300 text-amber-950 shadow-xs'
                   : 'bg-rose-50 border-rose-300 text-rose-900'
@@ -417,6 +446,8 @@ export default function TenantPortal({
                       ? 'bg-emerald-600 text-white'
                       : currentInvoice.status === 'PENDING_APPROVAL'
                       ? 'bg-amber-500 text-white animate-pulse'
+                      : isBeforeRentDue
+                      ? 'bg-linear-to-tr from-blue-600 to-indigo-600 text-white'
                       : isUtilitiesPending
                       ? 'bg-gradient-to-tr from-amber-500 to-orange-500 text-white'
                       : 'bg-rose-600 text-white'
@@ -425,6 +456,8 @@ export default function TenantPortal({
                       <CheckCircle2 className="w-7 h-7" />
                     ) : currentInvoice.status === 'PENDING_APPROVAL' ? (
                       <Clock className="w-7 h-7" />
+                    ) : isBeforeRentDue ? (
+                      <Calendar className="w-7 h-7" />
                     ) : isUtilitiesPending ? (
                       <Zap className="w-7 h-7" />
                     ) : (
@@ -438,10 +471,17 @@ export default function TenantPortal({
                           ? '✓ Đã Thanh Toán Hoàn Tất'
                           : currentInvoice.status === 'PENDING_APPROVAL'
                           ? '⏳ Đang Chờ Chủ Trọ Đối Soát Tiền'
+                          : isBeforeRentDue
+                          ? '⏳ Chưa Đến Hạn Thanh Toán Tiền Phòng'
                           : isUtilitiesPending
                           ? '⚡ Cần Thanh Toán Tiền Điện & Nước (Chốt Ngày 1 Tây)'
                           : '⚠️ Cần Thanh Toán Tiền Trọ Theo Hợp Đồng'}
                       </span>
+                      {isBeforeRentDue && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-300">
+                          Hạn đóng: Ngày {rentDay}/{currentInvoice.month?.slice(5)} (Còn {diffDays} ngày)
+                        </span>
+                      )}
                       {isUtilitiesPending && (
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
                           ✓ Tiền phòng đã đóng ngày {currentInvoice.paidDate ? new Date(currentInvoice.paidDate).toLocaleDateString('vi-VN') : 'theo HĐ'}
@@ -458,6 +498,8 @@ export default function TenantPortal({
                         ? `Hoàn tất lúc: ${currentInvoice.paidDate || 'Hôm nay'}. Đã lưu chứng từ đối soát an toàn.`
                         : currentInvoice.status === 'PENDING_APPROVAL'
                         ? 'Bạn đã tải lên biên lai chuyển khoản. Chủ trọ đang kiểm tra biến động số dư tài khoản để duyệt.'
+                        : isBeforeRentDue
+                        ? `Tiền phòng thu theo đúng ngày ký HĐ: ngày ${rentDay} hàng tháng (kỳ ${currentInvoice.rentCycleStr || currentInvoice.schedule?.rentCycleStr}). Đúng ngày hẹn hệ thống sẽ mở mã QR để bạn đóng tiền.`
                         : isUtilitiesPending
                         ? `Kỳ Tháng ${currentInvoice.month?.slice(5)}/${currentInvoice.month?.slice(0, 4)}: Tiền phòng đã thanh toán đủ. Đây là tiền điện (chốt 1/11: ${currentInvoice.electricityUsage} kWh) & nước (chốt 20/10: ${currentInvoice.waterUsage} m³) thu vào đầu tháng ngày 1 Tây.`
                         : `Kỳ thanh toán Tháng ${currentInvoice.month?.slice(5)}/${currentInvoice.month?.slice(0, 4)} • Hạn đóng ngày ${currentInvoice.rentDueDay || 1} hàng tháng theo HĐ`}
@@ -616,71 +658,114 @@ export default function TenantPortal({
 
               {/* VietQR Quick Scan & Bank Transfer */}
               {currentInvoice.status !== 'PAID' && (
-                <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                        <QrCode className="w-5 h-5 text-blue-600" />
-                        Quét Mã QR Chuyển Khoản Tự Động (VietQR) - {isUtilitiesPending ? 'Tiền Điện & Nước (1 Tây)' : 'Tiền Trọ Theo HĐ'}
-                      </h4>
-                      <p className="text-xs text-slate-500">
-                        {isUtilitiesPending
-                          ? 'Tiền phòng đã đóng đủ. Quét mã QR dưới đây để thanh toán riêng tiền điện nước chốt ngày 1 Tây.'
-                          : 'Chỉ cần mở app ngân hàng bất kỳ (Momo, Vietcombank, MB, Techcombank...) quét mã để thanh toán đúng số tiền và cú pháp'}
-                      </p>
+                isBeforeRentDue && !showEarlyPayQR ? (
+                  <div className="bg-white rounded-2xl border border-blue-200/90 p-5 shadow-2xs space-y-3">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-200">
+                          <Clock className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                            Mã QR Thanh Toán Sẽ Tự Động Hiển Thị Vào Ngày {currentInvoice.schedule?.rentDueDateStr || `Ngày ${rentDay} hàng tháng`}
+                          </h4>
+                          <p className="text-xs text-slate-600 mt-0.5">
+                            Hạn thanh toán tiền phòng theo hợp đồng là <strong>ngày {rentDay}/{currentInvoice.month?.slice(5)}</strong> (còn {diffDays} ngày nữa). Đúng ngày hẹn, hệ thống sẽ mở sẵn mã QR để bạn quét nộp.
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowEarlyPayQR(true)}
+                        className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 shadow-2xs transition-all shrink-0 cursor-pointer"
+                      >
+                        <QrCode className="w-4 h-4 text-blue-600" />
+                        <span>⚡ Mở Mã QR Đóng Tiền Sớm</span>
+                      </button>
                     </div>
                   </div>
-
-                  <div className="flex flex-col sm:flex-row items-center gap-6 bg-slate-50 p-4 rounded-2xl border border-slate-200">
-                    <div className="w-48 h-48 bg-white p-2.5 rounded-xl shadow-xs border border-slate-200 shrink-0 flex items-center justify-center">
-                      <img src={qrUrl} alt="VietQR" className="w-full h-full object-contain" />
+                ) : (
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                          <QrCode className="w-5 h-5 text-blue-600" />
+                          Quét Mã QR Chuyển Khoản Tự Động (VietQR) - {isUtilitiesPending ? 'Tiền Điện & Nước (1 Tây)' : isBeforeRentDue ? 'Đóng Tiền Sớm Theo HĐ' : 'Tiền Trọ Theo HĐ'}
+                          {isBeforeRentDue && showEarlyPayQR && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300">
+                              ⚡ Đang mở đóng sớm
+                            </span>
+                          )}
+                        </h4>
+                        <p className="text-xs text-slate-500">
+                          {isUtilitiesPending
+                            ? 'Tiền phòng đã đóng đủ. Quét mã QR dưới đây để thanh toán riêng tiền điện nước chốt ngày 1 Tây.'
+                            : 'Chỉ cần mở app ngân hàng bất kỳ (Momo, Vietcombank, MB, Techcombank...) quét mã để thanh toán đúng số tiền và cú pháp'}
+                        </p>
+                      </div>
+                      {isBeforeRentDue && showEarlyPayQR && (
+                        <button
+                          type="button"
+                          onClick={() => setShowEarlyPayQR(false)}
+                          className="text-xs font-semibold text-slate-500 hover:text-slate-700 bg-slate-100 px-3 py-1.5 rounded-lg cursor-pointer"
+                        >
+                          Thu gọn
+                        </button>
+                      )}
                     </div>
 
-                    <div className="space-y-2 text-xs text-slate-700 flex-1">
-                      <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-500">Ngân hàng:</span>
-                          <strong className="text-slate-900 font-bold">{settings.bankName}</strong>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-500">Chủ tài khoản:</span>
-                          <strong className="text-slate-900 font-bold">{settings.bankOwner}</strong>
-                        </div>
-                        <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                          <span className="text-slate-500">Số tài khoản:</span>
-                          <div className="flex items-center gap-1.5">
-                            <strong className="font-mono text-blue-700 text-sm font-black">{settings.bankAccount}</strong>
-                            <button
-                              type="button"
-                              onClick={handleCopyAccount}
-                              className="p-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-semibold"
-                            >
-                              {copiedAccount ? 'Đã sao chép' : 'Sao chép'}
-                            </button>
+                    <div className="flex flex-col sm:flex-row items-center gap-6 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                      <div className="w-48 h-48 bg-white p-2.5 rounded-xl shadow-xs border border-slate-200 shrink-0 flex items-center justify-center">
+                        <img src={qrUrl} alt="VietQR" className="w-full h-full object-contain" />
+                      </div>
+
+                      <div className="space-y-2 text-xs text-slate-700 flex-1">
+                        <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500">Ngân hàng:</span>
+                            <strong className="text-slate-900 font-bold">{settings.bankName}</strong>
                           </div>
-                        </div>
-                        <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                          <span className="text-slate-500">Nội dung chuyển khoản:</span>
-                          <strong className="font-mono text-emerald-700 font-bold">
-                            {currentRoom?.name?.replace(/[^0-9]/g, 'P') || 'P'} {memoType} T{currentInvoice?.month?.replace('-', '')}
-                          </strong>
-                        </div>
-                        <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                          <span className="text-slate-500">
-                            {isUtilitiesPending ? 'Số tiền chuyển (Điện Nước):' : 'Số tiền chuyển:'}
-                          </span>
-                          <strong className="text-rose-600 font-black text-sm">
-                            {formatVND(payAmount)}
-                          </strong>
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500">Chủ tài khoản:</span>
+                            <strong className="text-slate-900 font-bold">{settings.bankOwner}</strong>
+                          </div>
+                          <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                            <span className="text-slate-500">Số tài khoản:</span>
+                            <div className="flex items-center gap-1.5">
+                              <strong className="font-mono text-blue-700 text-sm font-black">{settings.bankAccount}</strong>
+                              <button
+                                type="button"
+                                onClick={handleCopyAccount}
+                                className="p-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-semibold"
+                              >
+                                {copiedAccount ? 'Đã sao chép' : 'Sao chép'}
+                              </button>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                            <span className="text-slate-500">Nội dung chuyển khoản:</span>
+                            <strong className="font-mono text-emerald-700 font-bold">
+                              {currentRoom?.name?.replace(/[^0-9]/g, 'P') || 'P'} {memoType} T{currentInvoice?.month?.replace('-', '')}
+                            </strong>
+                          </div>
+                          <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                            <span className="text-slate-500">
+                              {isUtilitiesPending ? 'Số tiền chuyển (Điện Nước):' : 'Số tiền chuyển:'}
+                            </span>
+                            <strong className="text-rose-600 font-black text-sm">
+                              {formatVND(payAmount)}
+                            </strong>
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                )
               )}
 
               {/* Upload Payment Receipt / Proof Section */}
-              {currentInvoice.status !== 'PAID' && (
+              {currentInvoice.status !== 'PAID' && (!isBeforeRentDue || showEarlyPayQR || currentProof) && (
                 <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-4">
                   <div>
                     <h4 className="font-bold text-slate-900 text-base flex items-center gap-2">
