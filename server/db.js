@@ -211,7 +211,7 @@ function initDatabase() {
         1, 'Nhà Trọ Hoàng Phát', '45A/23A, Đinh Tiên Hoàng, Phường Tân Hạnh, Tỉnh Vĩnh Long',
         'Nguyễn Đặng Minh Hoàng', '0829506597',
         'TECHCOMBANK', '8868357117', 'NGUYEN DANG MINH HOANG',
-        1500000, 50000, 4000, 12000, 30000, 5, 'Hoang@357117'
+        1500000, 50000, 4000, 12000, 0, 5, 'Hoang@357117'
       )
     `).run();
   }
@@ -277,13 +277,13 @@ function initDatabase() {
     insertInv.run('HD-202610-5', 5, '2026-10', 1500000, 31, 93, 62, 4000, 248000, 2, 4, 2, 12000, 24000, 50000, '[]', 0, 0, 1822000, 1550000, 272000, 'PARTIAL', '2026-10-28', '2026-10-28', 'Đã thu tiền phòng kỳ 28/10 (1.550.000 đ). Điện chốt 1/11: 93 (dùng 62kW). Nước chốt 20/10: 4 (dùng 2m³).', now, now, '2026-10-28', '2026-10-01');
     insertInv.run('HD-202610-6', 6, '2026-10', 1500000, 40, 77, 37, 4000, 148000, 1, 2, 1, 12000, 12000, 50000, '[]', 0, 0, 1710000, 1550000, 160000, 'PARTIAL', '2026-10-30', '2026-10-30', 'Đã thu tiền phòng kỳ 30/10 (1.550.000 đ). Điện chốt 1/11: 77 (dùng 37kW). Nước chốt 20/10: 2 (dùng 1m³).', now, now, '2026-10-30', '2026-10-01');
 
-    // 2026-11 (T11)
-    insertInv.run('HD-202611-1', 1, '2026-11', 1500000, 60, 60, 0, 4000, 0, 5, 5, 0, 12000, 0, 50000, '[{"name":"Rác & Vệ sinh chung","amount":30000}]', 30000, 0, 1580000, 0, 1580000, 'UNPAID', '2026-11-13', null, 'Tiền phòng thu ngày 13 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-11-13', '2026-11-01');
-    insertInv.run('HD-202611-2', 2, '2026-11', 1500000, 31, 31, 0, 4000, 0, 3, 3, 0, 12000, 0, 50000, '[{"name":"Rác & Vệ sinh chung","amount":30000}]', 30000, 0, 1580000, 0, 1580000, 'UNPAID', '2026-11-13', null, 'Tiền phòng thu ngày 13 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-11-13', '2026-11-01');
-    insertInv.run('HD-202611-3', 3, '2026-11', 1500000, 1, 1, 0, 4000, 0, 1, 1, 0, 12000, 0, 50000, '[{"name":"Rác & Vệ sinh chung","amount":30000}]', 30000, 0, 1580000, 0, 1580000, 'UNPAID', '2026-11-30', null, 'Tiền phòng thu ngày 30 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-11-30', '2026-11-01');
-    insertInv.run('HD-202611-4', 4, '2026-11', 1500000, 14, 14, 0, 4000, 0, 10, 10, 0, 12000, 0, 50000, '[{"name":"Rác & Vệ sinh chung","amount":30000}]', 30000, 0, 1580000, 0, 1580000, 'UNPAID', '2026-11-30', null, 'Tiền phòng thu ngày 30 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-11-30', '2026-11-01');
-    insertInv.run('HD-202611-5', 5, '2026-11', 1500000, 93, 93, 0, 4000, 0, 4, 4, 0, 12000, 0, 50000, '[{"name":"Rác & Vệ sinh chung","amount":30000}]', 30000, 0, 1580000, 0, 1580000, 'UNPAID', '2026-11-28', null, 'Tiền phòng thu ngày 28 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-11-28', '2026-11-01');
-    insertInv.run('HD-202611-6', 6, '2026-11', 1500000, 77, 77, 0, 4000, 0, 2, 2, 0, 12000, 0, 50000, '[{"name":"Rác & Vệ sinh chung","amount":30000}]', 30000, 0, 1580000, 0, 1580000, 'UNPAID', '2026-11-30', null, 'Tiền phòng thu ngày 30 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-11-30', '2026-11-01');
+    // 2026-11 (T11) - Tiền phòng và wifi 1.550.000 đ, không để mặc định tiền rác
+    insertInv.run('HD-202611-1', 1, '2026-11', 1500000, 60, 60, 0, 4000, 0, 5, 5, 0, 12000, 0, 50000, '[]', 0, 0, 1550000, 0, 1550000, 'UNPAID', '2026-11-13', null, 'Tiền phòng thu ngày 13 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-11-13', '2026-11-01');
+    insertInv.run('HD-202611-2', 2, '2026-11', 1500000, 31, 31, 0, 4000, 0, 3, 3, 0, 12000, 0, 50000, '[]', 0, 0, 1550000, 0, 1550000, 'UNPAID', '2026-11-13', null, 'Tiền phòng thu ngày 13 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-11-13', '2026-11-01');
+    insertInv.run('HD-202611-3', 3, '2026-11', 1500000, 1, 1, 0, 4000, 0, 1, 1, 0, 12000, 0, 50000, '[]', 0, 0, 1550000, 0, 1550000, 'UNPAID', '2026-11-30', null, 'Tiền phòng thu ngày 30 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-11-30', '2026-11-01');
+    insertInv.run('HD-202611-4', 4, '2026-11', 1500000, 14, 14, 0, 4000, 0, 10, 10, 0, 12000, 0, 50000, '[]', 0, 0, 1550000, 0, 1550000, 'UNPAID', '2026-11-30', null, 'Tiền phòng thu ngày 30 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-11-30', '2026-11-01');
+    insertInv.run('HD-202611-5', 5, '2026-11', 1500000, 93, 93, 0, 4000, 0, 4, 4, 0, 12000, 0, 50000, '[]', 0, 0, 1550000, 0, 1550000, 'UNPAID', '2026-11-28', null, 'Tiền phòng thu ngày 28 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-11-28', '2026-11-01');
+    insertInv.run('HD-202611-6', 6, '2026-11', 1500000, 77, 77, 0, 4000, 0, 2, 2, 0, 12000, 0, 50000, '[]', 0, 0, 1550000, 0, 1550000, 'UNPAID', '2026-11-30', null, 'Tiền phòng thu ngày 30 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-11-30', '2026-11-01');
   }
 
   // Ensure extra columns exist in invoices table if older DB
@@ -300,7 +300,30 @@ function initDatabase() {
     // Ignore if already exists
   }
 
-  // Ensure Month 10 invoices reflect collected room rent (1.550.000 đ) on contract dates
+  // Auto-migration 1: Ensure HD-202609-4 (Phòng 4 La Nguyễn Trọng Nhân) is marked as PAID
+  try {
+    db.prepare(`
+      UPDATE invoices
+      SET status = 'PAID', paidDate = '2026-09-30'
+      WHERE invoiceCode = 'HD-202609-4' AND remainingAmount = 0
+    `).run();
+  } catch (e) {
+    console.error('Migration error for HD-202609-4:', e);
+  }
+
+  // Auto-migration 2: Ensure any fully paid invoice (remainingAmount <= 0 and paidAmount > 0) has status = 'PAID'
+  try {
+    db.prepare(`
+      UPDATE invoices
+      SET status = 'PAID',
+          paidDate = COALESCE(paidDate, '2026-09-30')
+      WHERE remainingAmount <= 0 AND paidAmount > 0 AND status != 'PAID'
+    `).run();
+  } catch (e) {
+    console.error('Migration error for fully paid invoices:', e);
+  }
+
+  // Auto-migration 3: Ensure Month 10 invoices reflect collected room rent (1.550.000 đ) on contract dates
   try {
     const unadjusted = db.prepare("SELECT COUNT(*) as count FROM invoices WHERE month = '2026-10' AND paidAmount = 0").get();
     if (unadjusted && unadjusted.count > 0) {
@@ -317,10 +340,24 @@ function initDatabase() {
             notes = 'Đã thu tiền phòng theo ngày ký HĐ (1.550.000 đ). Còn thu điện & nước chốt ngày 1/11.'
         WHERE month = '2026-10' AND paidAmount = 0
       `).run();
-      db.pragma('wal_checkpoint(TRUNCATE)');
     }
   } catch (e) {
     console.error('Migration error for 2026-10 invoices:', e);
+  }
+
+  // Auto-migration 4: Remove default garbage fee from Month 11 invoices
+  try {
+    db.prepare(`
+      UPDATE invoices
+      SET extraFees = '[]',
+          totalExtraFee = 0,
+          totalAmount = 1550000,
+          remainingAmount = 1550000
+      WHERE month = '2026-11' AND extraFees LIKE '%Rác & Vệ sinh chung%' AND paidAmount = 0
+    `).run();
+    db.pragma('wal_checkpoint(TRUNCATE)');
+  } catch (e) {
+    console.error('Migration error for 2026-11 garbage fee removal:', e);
   }
 }
 

@@ -987,10 +987,9 @@ app.post('/api/invoices/generate-batch', (req, res) => {
     const wifiFee = room.wifiFee || settings.defaultWifiFee || 50000;
     const ePrice = settings.defaultElectricityPrice || 4000;
     const wPrice = settings.defaultWaterPrice || 12000;
-    const garbageFee = settings.defaultGarbageFee || 30000;
-
-    const defaultExtra = JSON.stringify([{ name: 'Rác & Vệ sinh chung', amount: garbageFee }]);
-    const totalExtra = garbageFee;
+    // Không để mặc định tiền rác, chỉ thu khi chủ trọ tự thêm vào
+    const defaultExtra = '[]';
+    const totalExtra = 0;
 
     const code = `HD-${month.replace('-', '')}-${room.name.replace(/[^0-9]/g, '') || room.id}`;
 
@@ -1089,14 +1088,15 @@ app.put('/api/invoices/:id', (req, res) => {
   const rem = Math.max(0, total - paid);
 
   let newStatus = status || existing.status;
-  if (!status) {
-    if (paid >= total && total > 0) newStatus = 'PAID';
-    else if (paid > 0) newStatus = 'PARTIAL';
+  if (paid >= total && total > 0) {
+    newStatus = 'PAID';
+  } else if (!status) {
+    if (paid > 0) newStatus = 'PARTIAL';
     else newStatus = existing.status === 'PENDING_APPROVAL' ? 'PENDING_APPROVAL' : 'UNPAID';
   }
 
   const now = new Date().toISOString();
-  const paidDate = newStatus === 'PAID' ? (existing.paidDate || now) : null;
+  const paidDate = (newStatus === 'PAID' || paid > 0) ? (existing.paidDate || now) : null;
 
   db.prepare(`
     UPDATE invoices SET

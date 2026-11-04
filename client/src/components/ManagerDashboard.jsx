@@ -469,8 +469,10 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                   const schedule = inv?.schedule;
                   const rentDay = schedule?.actualRentDay || (tenantInMonth?.startDate ? new Date(tenantInMonth.startDate).getDate() : 1);
                   const rentCycleStr = schedule?.rentCycleStr || `Ngày ${rentDay} tháng này ➔ Ngày ${rentDay} tháng sau`;
-                  const isPaid = inv?.status === 'PAID';
+                  const isPaid = inv?.status === 'PAID' || (inv && Number(inv.remainingAmount) <= 0 && Number(inv.paidAmount) > 0);
                   const isPending = inv?.status === 'PENDING_APPROVAL';
+                  const roomRentTotal = (Number(inv?.roomPrice) || (room.basePrice || 1500000)) + (Number(inv?.wifiFee) || (room.wifiFee || 50000));
+                  const isRoomPaid = Boolean(inv && Number(inv.paidAmount) >= roomRentTotal && Number(inv.remainingAmount) > 0);
 
                   return (
                     <div
@@ -478,6 +480,8 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                       className={`rounded-xl border p-3.5 flex flex-col justify-between transition-all ${
                         isPaid
                           ? 'bg-emerald-50/40 border-emerald-200'
+                          : isRoomPaid
+                          ? 'bg-amber-50/40 border-amber-200'
                           : isOccupied
                           ? 'bg-slate-50/70 border-slate-200 hover:border-blue-300'
                           : 'bg-slate-50/30 border-dashed border-slate-200'
@@ -498,11 +502,19 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                                 ? 'bg-emerald-100 text-emerald-800'
                                 : isPending
                                 ? 'bg-amber-100 text-amber-800'
+                                : isRoomPaid
+                                ? 'bg-amber-100 text-amber-900 border border-amber-300'
                                 : schedule?.diffDays < 0
                                 ? 'bg-rose-100 text-rose-800'
                                 : 'bg-blue-100 text-blue-800'
                             }`}>
-                              {isPaid ? '✓ Đã thu đủ' : isPending ? '⏳ Chờ duyệt' : schedule?.rentDueStatusText || 'Chưa đóng'}
+                              {isPaid
+                                ? '✓ Đã thu đủ'
+                                : isPending
+                                ? '⏳ Chờ duyệt'
+                                : isRoomPaid
+                                ? `⚡ Chờ điện nước (${formatVND(inv.remainingAmount)})`
+                                : schedule?.rentDueStatusText || 'Chưa đóng'}
                             </span>
                           ) : (
                             <span className="text-[10px] font-medium text-slate-400 bg-white px-2 py-0.5 rounded border border-slate-200">
@@ -531,7 +543,7 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                                   <Home className="w-3 h-3 text-blue-600" /> Tiền phòng:
                                 </span>
                                 <span className="font-bold text-blue-700 text-xs">
-                                  {formatVND(room.basePrice)}
+                                  {formatVND(roomRentTotal)}
                                 </span>
                               </div>
                               <div className="text-[11px] text-slate-600 mt-1 flex items-center justify-between">
@@ -552,7 +564,7 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                                   <Zap className="w-3 h-3 text-amber-500" /> Điện & Nước:
                                 </span>
                                 <span className="font-semibold text-slate-700 text-[11px]">
-                                  {inv ? formatVND((inv.electricityCost || 0) + (inv.waterCost || 0) + (inv.wifiFee || 0)) : 'Chưa tính'}
+                                  {inv ? formatVND((inv.electricityCost || 0) + (inv.waterCost || 0) + (inv.totalExtraFee || 0)) : 'Chưa tính'}
                                 </span>
                               </div>
                               <div className="text-[11px] text-slate-600 mt-1 flex items-center justify-between">
@@ -662,6 +674,9 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                   || tenants.find(t => Number(t.roomId) === Number(room.id) && t.status === 'ACTIVE');
                 const tenantInMonth = tenant && (!currentMonth || !tenant.startDate || tenant.startDate.slice(0, 7) <= currentMonth) ? tenant : null;
                 const isOccupied = Boolean(tenantInMonth);
+                const isPaidBottom = inv?.status === 'PAID' || (inv && Number(inv.remainingAmount) <= 0 && Number(inv.paidAmount) > 0);
+                const roomRentTotalBottom = (Number(inv?.roomPrice) || (room.basePrice || 1500000)) + (Number(inv?.wifiFee) || (room.wifiFee || 50000));
+                const isRoomPaidBottom = Boolean(inv && Number(inv.paidAmount) >= roomRentTotalBottom && Number(inv.remainingAmount) > 0);
 
                 return (
                   <div
@@ -691,13 +706,21 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                         {/* Status Badge */}
                         {inv ? (
                           <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
-                            inv.status === 'PAID'
+                            isPaidBottom
                               ? 'bg-emerald-100 text-emerald-800'
                               : inv.status === 'PENDING_APPROVAL'
                               ? 'bg-amber-100 text-amber-900 animate-pulse'
+                              : isRoomPaidBottom
+                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
                               : 'bg-rose-100 text-rose-800'
                           }`}>
-                            {inv.status === 'PAID' ? '✓ Đã thanh toán' : inv.status === 'PENDING_APPROVAL' ? '⏳ Chờ duyệt bill' : '⚠️ Chưa đóng tiền'}
+                            {isPaidBottom
+                              ? '✓ Đã thanh toán'
+                              : inv.status === 'PENDING_APPROVAL'
+                              ? '⏳ Chờ duyệt bill'
+                              : isRoomPaidBottom
+                              ? `⚡ Chờ điện nước (${formatVND(inv.remainingAmount)})`
+                              : '⚠️ Chưa đóng tiền'}
                           </span>
                         ) : isOccupied ? (
                           <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
