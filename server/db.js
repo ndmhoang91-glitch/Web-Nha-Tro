@@ -277,9 +277,9 @@ function initDatabase() {
     insertInv.run('HD-202610-5', 5, '2026-10', 1500000, 31, 93, 62, 4000, 248000, 2, 4, 2, 12000, 24000, 50000, '[]', 0, 0, 1822000, 1550000, 272000, 'PARTIAL', '2026-10-28', '2026-10-28', 'Đã thu tiền phòng kỳ 28/10 (1.550.000 đ). Điện chốt 1/11: 93 (dùng 62kW). Nước chốt 20/10: 4 (dùng 2m³).', now, now, '2026-10-28', '2026-10-01');
     insertInv.run('HD-202610-6', 6, '2026-10', 1500000, 40, 77, 37, 4000, 148000, 1, 2, 1, 12000, 12000, 50000, '[]', 0, 0, 1710000, 1550000, 160000, 'PARTIAL', '2026-10-30', '2026-10-30', 'Đã thu tiền phòng kỳ 30/10 (1.550.000 đ). Điện chốt 1/11: 77 (dùng 37kW). Nước chốt 20/10: 2 (dùng 1m³).', now, now, '2026-10-30', '2026-10-01');
 
-    // 2026-11 (T11) - Tiền phòng và wifi 1.550.000 đ, không để mặc định tiền rác
-    insertInv.run('HD-202611-1', 1, '2026-11', 1500000, 60, 60, 0, 4000, 0, 5, 5, 0, 12000, 0, 50000, '[]', 0, 0, 1550000, 0, 1550000, 'UNPAID', '2026-11-13', null, 'Tiền phòng thu ngày 13 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-11-13', '2026-11-01');
-    insertInv.run('HD-202611-2', 2, '2026-11', 1500000, 31, 31, 0, 4000, 0, 3, 3, 0, 12000, 0, 50000, '[]', 0, 0, 1550000, 0, 1550000, 'UNPAID', '2026-11-13', null, 'Tiền phòng thu ngày 13 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-11-13', '2026-11-01');
+    // 2026-11 (T11) - Tiền phòng và wifi 1.550.000 đ, thu tiền phòng ngày 13/11 cho P1, P2. Nước ghi ngày 18/11: P1 (1m³), P2 (3m³)
+    insertInv.run('HD-202611-1', 1, '2026-11', 1500000, 60, 60, 0, 4000, 0, 5, 6, 1, 12000, 12000, 50000, '[]', 0, 0, 1562000, 1550000, 12000, 'PARTIAL', '2026-11-13', '2026-11-13', 'Đã thu tiền phòng ngày 13/11 (1.550.000 đ). Nước ghi ngày 18/11: 1m³ (12.000 đ). Chờ điện nước.', now, now, '2026-11-13', '2026-11-01');
+    insertInv.run('HD-202611-2', 2, '2026-11', 1500000, 31, 31, 0, 4000, 0, 3, 6, 3, 12000, 36000, 50000, '[]', 0, 0, 1586000, 1550000, 36000, 'PARTIAL', '2026-11-13', '2026-11-13', 'Đã thu tiền phòng ngày 13/11 (1.550.000 đ). Nước ghi ngày 18/11: 3m³ (36.000 đ). Chờ điện nước.', now, now, '2026-11-13', '2026-11-01');
     insertInv.run('HD-202611-3', 3, '2026-11', 1500000, 1, 1, 0, 4000, 0, 1, 1, 0, 12000, 0, 50000, '[]', 0, 0, 1550000, 0, 1550000, 'UNPAID', '2026-11-30', null, 'Tiền phòng thu ngày 30 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-11-30', '2026-11-01');
     insertInv.run('HD-202611-4', 4, '2026-11', 1500000, 14, 14, 0, 4000, 0, 10, 10, 0, 12000, 0, 50000, '[]', 0, 0, 1550000, 0, 1550000, 'UNPAID', '2026-11-30', null, 'Tiền phòng thu ngày 30 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-11-30', '2026-11-01');
     insertInv.run('HD-202611-5', 5, '2026-11', 1500000, 93, 93, 0, 4000, 0, 4, 4, 0, 12000, 0, 50000, '[]', 0, 0, 1550000, 0, 1550000, 'UNPAID', '2026-11-28', null, 'Tiền phòng thu ngày 28 theo HĐ, Điện nước chốt ngày 1 Tây', now, now, '2026-11-28', '2026-11-01');
@@ -360,33 +360,59 @@ function initDatabase() {
     console.error('Migration error for 2026-11 garbage fee removal:', e);
   }
 
-  // Auto-migration 5: Fix duplicate quick-pay proof & paidAmount for Room 1 (HD-202611-1) in Month 11
+  // Auto-migration 5: Sync Month 11 Room 1 & Room 2 with collected room rent and water readings
   try {
-    const dupProofs = db.prepare(`
-      SELECT id FROM payment_proofs 
-      WHERE invoiceId IN (SELECT id FROM invoices WHERE invoiceCode = 'HD-202611-1')
-        AND amount = 1550000 
-      ORDER BY id ASC
-    `).all();
-    if (dupProofs && dupProofs.length > 1) {
-      const idsToDelete = dupProofs.slice(1).map(p => p.id);
-      db.prepare(`DELETE FROM payment_proofs WHERE id IN (${idsToDelete.join(',')})`).run();
+    // Room 1: Water 1m3 (12k) + Rent 1.550k (paid) => Total 1.562k, Paid 1.550k, Rem 12k
+    db.prepare(`
+      UPDATE invoices
+      SET oldWater = 5, newWater = 6, waterUsage = 1, waterCost = 12000,
+          totalAmount = 1562000, paidAmount = 1550000, remainingAmount = 12000,
+          status = 'PARTIAL', paidDate = '2026-11-13'
+      WHERE invoiceCode = 'HD-202611-1'
+    `).run();
+
+    // Room 2: Water 3m3 (36k) + Rent 1.550k (paid) => Total 1.586k, Paid 1.550k, Rem 36k
+    db.prepare(`
+      UPDATE invoices
+      SET oldWater = 3, newWater = 6, waterUsage = 3, waterCost = 36000,
+          totalAmount = 1586000, paidAmount = 1550000, remainingAmount = 36000,
+          status = 'PARTIAL', paidDate = '2026-11-13'
+      WHERE invoiceCode = 'HD-202611-2'
+    `).run();
+
+    // Clean duplicate proofs for Room 1
+    const proofs1 = db.prepare("SELECT id FROM payment_proofs WHERE invoiceId IN (SELECT id FROM invoices WHERE invoiceCode = 'HD-202611-1') ORDER BY id ASC").all();
+    if (proofs1 && proofs1.length > 1) {
+      const delIds = proofs1.slice(1).map(x => x.id);
+      db.prepare(`DELETE FROM payment_proofs WHERE id IN (${delIds.join(',')})`).run();
     }
 
-    const inv19 = db.prepare("SELECT * FROM invoices WHERE invoiceCode = 'HD-202611-1'").get();
-    if (inv19 && inv19.paidAmount > 1550000) {
-      const newRem = Math.max(0, inv19.totalAmount - 1550000);
-      const newStatus = newRem === 0 ? 'PAID' : 'PARTIAL';
-      db.prepare(`
-        UPDATE invoices 
-        SET paidAmount = 1550000,
-            remainingAmount = ?,
-            status = ?
-        WHERE id = ?
-      `).run(newRem, newStatus, inv19.id);
+    // Ensure Room 1 has at least 1 proof for 13/11
+    if (!proofs1 || proofs1.length === 0) {
+      const inv1 = db.prepare("SELECT id FROM invoices WHERE invoiceCode = 'HD-202611-1'").get();
+      if (inv1) {
+        db.prepare(`
+          INSERT INTO payment_proofs (invoiceId, roomId, amount, paymentMethod, proofImageUrl, transactionCode, paymentDate, submittedBy, status, reviewNotes, reviewedAt, createdAt)
+          VALUES (?, 1, 1550000, 'CASH', '', 'TIEN_MAT_TRUC_TIEP', '2026-11-13T12:00:00.000Z', 'MANAGER', 'APPROVED', 'Chủ trọ xác nhận nhận tiền phòng theo ngày HĐ (Tiền mặt)', '2026-11-13T12:00:00.000Z', '2026-11-13T12:00:00.000Z')
+        `).run(inv1.id);
+      }
     }
+
+    // Ensure Room 2 has at least 1 proof for 13/11
+    const proofs2 = db.prepare("SELECT id FROM payment_proofs WHERE invoiceId IN (SELECT id FROM invoices WHERE invoiceCode = 'HD-202611-2') ORDER BY id ASC").all();
+    if (!proofs2 || proofs2.length === 0) {
+      const inv2 = db.prepare("SELECT id FROM invoices WHERE invoiceCode = 'HD-202611-2'").get();
+      if (inv2) {
+        db.prepare(`
+          INSERT INTO payment_proofs (invoiceId, roomId, amount, paymentMethod, proofImageUrl, transactionCode, paymentDate, submittedBy, status, reviewNotes, reviewedAt, createdAt)
+          VALUES (?, 2, 1550000, 'CASH', '', 'TIEN_MAT_TRUC_TIEP', '2026-11-13T12:00:00.000Z', 'MANAGER', 'APPROVED', 'Chủ trọ xác nhận nhận tiền phòng theo ngày HĐ (Tiền mặt)', '2026-11-13T12:00:00.000Z', '2026-11-13T12:00:00.000Z')
+        `).run(inv2.id);
+      }
+    }
+
+    db.pragma('wal_checkpoint(TRUNCATE)');
   } catch (e) {
-    console.error('Migration error for HD-202611-1:', e);
+    console.error('Migration error for 2026-11 sync:', e);
   }
 }
 
