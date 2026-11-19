@@ -62,7 +62,7 @@ export default function TenantPortal({
   const roomRentTotal = (Number(currentInvoice?.roomPrice) || 0) + (Number(currentInvoice?.wifiFee) || 0);
   const utilitiesTotal = Math.max(0, (Number(currentInvoice?.electricityCost) || 0) + (Number(currentInvoice?.waterCost) || 0) + (Number(currentInvoice?.totalExtraFee) || 0) - (Number(currentInvoice?.discount) || 0));
 
-  const isAllPaid = Boolean(currentInvoice && (currentInvoice.status === 'PAID' || currentInvoice.remainingAmount <= 0));
+  const isAllPaid = Boolean(currentInvoice && Number(currentInvoice.remainingAmount) <= 0 && (currentInvoice.status === 'PAID' || Number(currentInvoice.paidAmount) > 0));
   const isRoomRentPaid = Boolean(currentInvoice && (isAllPaid || currentInvoice.paidAmount >= roomRentTotal));
   const isUtilitiesPending = Boolean(currentInvoice && isRoomRentPaid && currentInvoice.remainingAmount > 0);
 
@@ -385,7 +385,7 @@ export default function TenantPortal({
                   <div className="flex flex-wrap items-center gap-1.5">
                     {roomInvoices.map(inv => {
                       const invRoomRent = (Number(inv.roomPrice) || 0) + (Number(inv.wifiFee) || 0);
-                      const invPaid = Boolean(inv.status === 'PAID' || inv.remainingAmount <= 0);
+                      const invPaid = Boolean(inv && Number(inv.remainingAmount) <= 0 && (inv.status === 'PAID' || Number(inv.paidAmount) > 0));
                       const invRoomPaid = Boolean(inv.paidAmount >= invRoomRent && inv.remainingAmount > 0);
                       const isCurrentActive = inv.month === (currentInvoice?.month);
                       const invDiffDays = inv.schedule?.diffDays ?? 0;

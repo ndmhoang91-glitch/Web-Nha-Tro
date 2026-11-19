@@ -156,10 +156,10 @@ Cảm ơn anh/chị!`;
     let label = 'toàn bộ hóa đơn';
 
     if (type === 'ROOM_ONLY') {
-      amountToPay = roomRentRemaining > 0 ? roomRentRemaining : roomRentTotal;
+      amountToPay = roomRentRemaining;
       label = `tiền phòng (${formatVND(amountToPay)})`;
     } else if (type === 'UTILITIES_ONLY') {
-      amountToPay = utilitiesRemaining > 0 ? utilitiesRemaining : utilitiesTotal;
+      amountToPay = utilitiesRemaining;
       label = `tiền điện nước (${formatVND(amountToPay)})`;
     }
 
@@ -775,7 +775,7 @@ Cảm ơn anh/chị!`;
             {invoice.status !== 'PAID' && (
               <>
                 {viewMode === 'ROOM_ONLY' ? (
-                  roomRentRemaining <= 0 && invoice.paidAmount >= roomRentTotal ? (
+                  roomRentRemaining <= 0 ? (
                     <span className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800">
                       <Check className="w-4 h-4" /> Đã thu đủ tiền phòng
                     </span>
@@ -787,11 +787,11 @@ Cảm ơn anh/chị!`;
                       className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors cursor-pointer"
                     >
                       <Check className="w-4 h-4" />
-                      {quickPaying ? 'Đang xử lý...' : `Xác Nhận Thu Tiền Phòng (${formatVND(roomRentRemaining > 0 ? roomRentRemaining : roomRentTotal)})`}
+                      {quickPaying ? 'Đang xử lý...' : `Xác Nhận Thu Tiền Phòng (${formatVND(roomRentRemaining)})`}
                     </button>
                   )
                 ) : viewMode === 'UTILITIES_ONLY' ? (
-                  utilitiesRemaining <= 0 && invoice.paidAmount >= invoice.totalAmount ? (
+                  utilitiesRemaining <= 0 ? (
                     <span className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800">
                       <Check className="w-4 h-4" /> Đã thu đủ điện nước
                     </span>
@@ -803,7 +803,7 @@ Cảm ơn anh/chị!`;
                       className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors cursor-pointer"
                     >
                       <Check className="w-4 h-4" />
-                      {quickPaying ? 'Đang xử lý...' : `Xác Nhận Thu Điện Nước (${formatVND(utilitiesRemaining > 0 ? utilitiesRemaining : utilitiesTotal)})`}
+                      {quickPaying ? 'Đang xử lý...' : `Xác Nhận Thu Điện Nước (${formatVND(utilitiesRemaining)})`}
                     </button>
                   )
                 ) : (

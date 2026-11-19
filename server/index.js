@@ -1090,9 +1090,13 @@ app.put('/api/invoices/:id', (req, res) => {
   let newStatus = status || existing.status;
   if (paid >= total && total > 0) {
     newStatus = 'PAID';
-  } else if (!status) {
-    if (paid > 0) newStatus = 'PARTIAL';
-    else newStatus = existing.status === 'PENDING_APPROVAL' ? 'PENDING_APPROVAL' : 'UNPAID';
+  } else if (rem > 0) {
+    if (newStatus === 'PAID') {
+      newStatus = paid > 0 ? 'PARTIAL' : 'UNPAID';
+    } else if (!status) {
+      if (paid > 0) newStatus = 'PARTIAL';
+      else newStatus = existing.status === 'PENDING_APPROVAL' ? 'PENDING_APPROVAL' : 'UNPAID';
+    }
   }
 
   const now = new Date().toISOString();
@@ -1123,8 +1127,20 @@ app.post('/api/invoices/:id/quick-pay', (req, res) => {
   const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
   if (!inv) return res.status(404).json({ error: 'Invoice not found' });
 
+  // Prevent double collection if invoice is already fully paid
+  if (inv.remainingAmount <= 0) {
+    return res.status(400).json({ success: false, message: 'Hóa đơn này đã được thu đủ, không thể thu thêm!' });
+  }
+
   const { paymentMethod, amount, note } = req.body;
-  const payAmt = amount ? Number(amount) : inv.remainingAmount;
+  const requestedAmt = amount !== undefined && amount !== null ? Number(amount) : inv.remainingAmount;
+
+  if (requestedAmt <= 0) {
+    return res.status(400).json({ success: false, message: 'Số tiền thanh toán phải lớn hơn 0!' });
+  }
+
+  // Never allow paying more than remainingAmount
+  const payAmt = Math.min(requestedAmt, inv.remainingAmount);
   const newPaid = inv.paidAmount + payAmt;
   const rem = Math.max(0, inv.totalAmount - newPaid);
   const status = rem === 0 ? 'PAID' : 'PARTIAL';
@@ -1147,6 +1163,20 @@ app.post('/api/invoices/:id/quick-pay', (req, res) => {
 
   logAudit('XÁC_NHẬN_THANH_TOÁN', `Xác nhận thu ${payAmt.toLocaleString('vi-VN')}đ cho hóa đơn ${inv.invoiceCode}`, 'MANAGER', 'Chủ Trọ', inv.roomId);
   res.json({ success: true, paidAmount: newPaid, remainingAmount: rem, status });
+});
+
+// Delete a payment proof
+app.delete('/api/proofs/:id', (req, res) => {
+  try {
+    const proofId = req.params.id;
+    const proof = db.prepare('SELECT * FROM payment_proofs WHERE id = ?').get(proofId);
+    if (!proof) return res.status(404).json({ error: 'Proof not found' });
+    db.prepare('DELETE FROM payment_proofs WHERE id = ?').run(proofId);
+    logAudit('XÓA_CHỨNG_TỪ', `Xóa chứng từ #${proofId} (${proof.amount.toLocaleString('vi-VN')}đ) phòng ${proof.roomId}`, 'MANAGER', 'Chủ Trọ', proof.roomId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ----------------------

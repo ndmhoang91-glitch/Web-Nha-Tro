@@ -445,7 +445,7 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
               const schedule = inv?.schedule;
               const rentDay = schedule?.actualRentDay || (tenantInMonth?.startDate ? new Date(tenantInMonth.startDate).getDate() : 1);
               const roomRentTotal = (Number(inv?.roomPrice) || (room.basePrice || 1500000)) + (Number(inv?.wifiFee) || (room.wifiFee || 50000));
-              const isPaid = inv?.status === 'PAID' || (inv && Number(inv.remainingAmount) <= 0 && Number(inv.paidAmount) > 0);
+              const isPaid = Boolean(inv && Number(inv.remainingAmount) <= 0 && (inv.status === 'PAID' || Number(inv.paidAmount) > 0));
               const isRoomPaid = isPaid || Boolean(inv && Number(inv.paidAmount) >= roomRentTotal);
               const diffDays = schedule?.diffDays ?? 0;
               const isOverdue = isOccupied && !isRoomPaid && diffDays < 0;
@@ -798,9 +798,9 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                         const schedule = inv?.schedule;
                         const rentDay = schedule?.actualRentDay || (tenantInMonth?.startDate ? new Date(tenantInMonth.startDate).getDate() : 1);
                         const rentCycleStr = schedule?.rentCycleStr || `Ngày ${rentDay} tháng này ➔ Ngày ${rentDay} tháng sau`;
-                        const isPaid = inv?.status === 'PAID' || (inv && Number(inv.remainingAmount) <= 0 && Number(inv.paidAmount) > 0);
-                        const isPending = inv?.status === 'PENDING_APPROVAL';
                         const roomRentTotal = (Number(inv?.roomPrice) || (room.basePrice || 1500000)) + (Number(inv?.wifiFee) || (room.wifiFee || 50000));
+                        const isPaid = Boolean(inv && Number(inv.remainingAmount) <= 0 && (inv.status === 'PAID' || Number(inv.paidAmount) > 0));
+                        const isPending = inv?.status === 'PENDING_APPROVAL';
                         const isRoomPaid = Boolean(inv && Number(inv.paidAmount) >= roomRentTotal && Number(inv.remainingAmount) > 0);
 
                         return (
@@ -1006,7 +1006,7 @@ Nội dung: ${inv.roomName?.replace(/[^0-9]/g, 'P')} TIEN TRO T${inv.month?.repl
                   || tenants.find(t => Number(t.roomId) === Number(room.id) && t.status === 'ACTIVE');
                 const tenantInMonth = tenant && (!currentMonth || !tenant.startDate || tenant.startDate.slice(0, 7) <= currentMonth) ? tenant : null;
                 const isOccupied = Boolean(tenantInMonth);
-                const isPaidBottom = inv?.status === 'PAID' || (inv && Number(inv.remainingAmount) <= 0 && Number(inv.paidAmount) > 0);
+                const isPaidBottom = Boolean(inv && Number(inv.remainingAmount) <= 0 && (inv.status === 'PAID' || Number(inv.paidAmount) > 0));
                 const roomRentTotalBottom = (Number(inv?.roomPrice) || (room.basePrice || 1500000)) + (Number(inv?.wifiFee) || (room.wifiFee || 50000));
                 const isRoomPaidBottom = Boolean(inv && Number(inv.paidAmount) >= roomRentTotalBottom && Number(inv.remainingAmount) > 0);
 

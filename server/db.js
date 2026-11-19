@@ -359,6 +359,35 @@ function initDatabase() {
   } catch (e) {
     console.error('Migration error for 2026-11 garbage fee removal:', e);
   }
+
+  // Auto-migration 5: Fix duplicate quick-pay proof & paidAmount for Room 1 (HD-202611-1) in Month 11
+  try {
+    const dupProofs = db.prepare(`
+      SELECT id FROM payment_proofs 
+      WHERE invoiceId IN (SELECT id FROM invoices WHERE invoiceCode = 'HD-202611-1')
+        AND amount = 1550000 
+      ORDER BY id ASC
+    `).all();
+    if (dupProofs && dupProofs.length > 1) {
+      const idsToDelete = dupProofs.slice(1).map(p => p.id);
+      db.prepare(`DELETE FROM payment_proofs WHERE id IN (${idsToDelete.join(',')})`).run();
+    }
+
+    const inv19 = db.prepare("SELECT * FROM invoices WHERE invoiceCode = 'HD-202611-1'").get();
+    if (inv19 && inv19.paidAmount > 1550000) {
+      const newRem = Math.max(0, inv19.totalAmount - 1550000);
+      const newStatus = newRem === 0 ? 'PAID' : 'PARTIAL';
+      db.prepare(`
+        UPDATE invoices 
+        SET paidAmount = 1550000,
+            remainingAmount = ?,
+            status = ?
+        WHERE id = ?
+      `).run(newRem, newStatus, inv19.id);
+    }
+  } catch (e) {
+    console.error('Migration error for HD-202611-1:', e);
+  }
 }
 
 initDatabase();
